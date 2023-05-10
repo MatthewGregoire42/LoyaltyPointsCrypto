@@ -10,8 +10,9 @@ name = "crypto"
 crate-type = ["cdylib"]
 
 [dependencies]
-curve25519-dalek = "3.2.1"
-rand_core = "0.6.4"
+curve25519-dalek = "3"
+rand_core = "0.5"
+sha2 = "0.9"
 
 [dependencies.pyo3]
 version = "0.18.3"
