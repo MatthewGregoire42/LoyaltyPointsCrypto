@@ -58,25 +58,61 @@ fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> u32 {
             m += 1;
         }
     }
+    // TODO: what if m is negative?
 }
 
 struct TxCiphertextData {
     ciphertext: (RistrettoPoint, RistrettoPoint),
     y: Scalar,
-    m: u32, // TODO: need signed values of m. maybe calculate the inverse on the fly in encryption?
-    public_h
+    m: Scalar, // TODO: need signed values of m. maybe calculate the inverse on the fly in encryption?
+    public_h: RistrettoPoint
 }
 
+#[pyclass]
+#[derive(Clone)]
 struct CompressedTxCiphertextData {
     ciphertext: ([u8; 32], [u8; 32]),
     y: [u8; 32],
-    m: u32,
+    m: [u8; 32],
     public_h: [u8; 32],
 }
 
+impl TxCiphertextData {
+    fn compress(&self) -> CompressedTxCiphertextData {
+        CompressedTxCiphertextData {
+            ciphertext: (self.ciphertext.0.compress().to_bytes(),
+                         self.ciphertext.1.compress().to_bytes()),
+            y: self.y.to_bytes(),
+            m: Scalar::to_bytes(&self.m),
+            public_h: self.public_h.compress().to_bytes(),
+        }
+    }
+}
+
+impl CompressedTxCiphertextData {
+    fn decompress(&self) -> TxCiphertextData {
+        TxCiphertextData {
+            ciphertext: (CompressedRistretto::from_slice(&self.ciphertext.0).decompress().unwrap(),
+                         CompressedRistretto::from_slice(&self.ciphertext.1).decompress().unwrap()),
+            y: Scalar::from_bytes_mod_order(self.y),
+            m: Scalar::from_bytes_mod_order(self.m),
+            public_h: CompressedRistretto::from_slice(&self.public_h).decompress().unwrap(),
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
 struct CompressedCtEqProof {
-    shopper_ct: TxCiphertextData,
-    barcode_ct: TxCiphertextData,
+    shopper_ct: ([u8; 32], [u8; 32]),
+    barcode_ct: ([u8; 32], [u8; 32]),
+    hs: [u8; 32],
+    hb: [u8; 32],
+    cs0_t: [u8; 32],
+    cs1_t: [u8; 32],
+    cb0_t: [u8; 32],
+    cb1_t: [u8; 32],
+    i_t: [u8; 32],
     m_z: [u8; 32],
     mp_z: [u8; 32],
     ys_z: [u8; 32],
@@ -84,20 +120,23 @@ struct CompressedCtEqProof {
 }
 
 #[pyfunction]
-fn zk_ct_eq_prove(cs: ([u8; 32], [u8; 32]), cb: ([u8; 32], [u8; 32]),
-                  ys: [u8; 32], yb: [u8; 32], m: u32, mp: u32, hs: [u8; 32], hb: [u8; 32]) ->
-                  ([u8; 32], [u8; 32], [u8; 32], [u8; 32]) {
+fn zk_ct_eq_prove(shopper_tx: CompressedTxCiphertextData, barcode_tx: CompressedTxCiphertextData)
+                 -> CompressedCtEqProof {
     let g = &constants::RISTRETTO_BASEPOINT_TABLE;
-    let cs0 = CompressedRistretto::from_slice(&cs.0).decompress().unwrap();
-    let cs1 = CompressedRistretto::from_slice(&cs.1).decompress().unwrap();
-    let cb0 = CompressedRistretto::from_slice(&cb.0).decompress().unwrap();
-    let cb1 = CompressedRistretto::from_slice(&cb.1).decompress().unwrap();
-    let ys = Scalar::from_bytes_mod_order(ys);
-    let yb = Scalar::from_bytes_mod_order(yb);
-    let m = Scalar::from(m);
-    let mp = Scalar::from(mp);
-    let hs = CompressedRistretto::from_slice(&hs).decompress().unwrap();
-    let hb = CompressedRistretto::from_slice(&hb).decompress().unwrap();
+    
+    let shopper_tx: TxCiphertextData = shopper_tx.decompress();
+    let barcode_tx: TxCiphertextData = barcode_tx.decompress();
+
+    let cs0 = shopper_tx.ciphertext.0;
+    let cs1 = shopper_tx.ciphertext.1;
+    let cb0 = barcode_tx.ciphertext.0;
+    let cb1 = barcode_tx.ciphertext.1;
+    let ys = shopper_tx.y;
+    let yb = barcode_tx.y;
+    let m = shopper_tx.m;
+    let mp = barcode_tx.m;
+    let hs = shopper_tx.public_h;
+    let hb = barcode_tx.public_h;
 
     // Commitment
     let m_t = Scalar::random(&mut OsRng);
@@ -126,13 +165,58 @@ fn zk_ct_eq_prove(cs: ([u8; 32], [u8; 32]), cb: ([u8; 32], [u8; 32]),
     let ys_z = ys_t + ys*c;
     let yb_z = yb_t + yb*c;
 
-    (m_z.to_bytes(), mp_z.to_bytes(), ys_z.to_bytes(), yb_z.to_bytes())
+    CompressedCtEqProof {
+        shopper_ct: (cs0.compress().to_bytes(), cs1.compress().to_bytes()),
+        barcode_ct: (cb0.compress().to_bytes(), cb1.compress().to_bytes()),
+        cs0_t: cs0_t.compress().to_bytes(),
+        cs1_t: cs1_t.compress().to_bytes(),
+        cb0_t: cb0_t.compress().to_bytes(),
+        cb1_t: cb1_t.compress().to_bytes(),
+        i_t: i_t.compress().to_bytes(),
+        m_z: m_z.to_bytes(),
+        mp_z: mp_z.to_bytes(),
+        ys_z: ys_z.to_bytes(),
+        yb_z: yb_z.to_bytes(),
+        hs: hs.compress().to_bytes(),
+        hb: hb.compress().to_bytes(),
+    }
 }
 
-fn zk_ct_eq_verify(cs: ([u8; 32], [u8; 32]), cb: ([u8; 32], [u8; 32]),
-                   ys: [u8; 32], yb: [u8; 32], m: u32, mp: u32, hs: [u8; 32], hb: [u8; 32],
-                   m_z: [u8; 32], mp_z: [u8; 32], ys_z: [u8; 32], yb_z: [u8; 32]) -> bool {
+#[pyfunction]
+fn zk_ct_eq_verify(pi: CompressedCtEqProof) -> bool {
+    // Recompute c
+    let mut hasher = Sha512::default();
+    for elt in [pi.shopper_ct.0, pi.shopper_ct.1, pi.barcode_ct.0, pi.barcode_ct.1,
+                pi.cs0_t, pi.cs1_t, pi.cb0_t, pi.cb1_t, pi.i_t].iter() {
+        hasher.update(&elt);
+    }
+    let c = Scalar::from_hash(hasher);
 
+    let g = &constants::RISTRETTO_BASEPOINT_TABLE;
+
+    let cs0 = CompressedRistretto::from_slice(&pi.shopper_ct.0).decompress().unwrap();
+    let cs1 = CompressedRistretto::from_slice(&pi.shopper_ct.1).decompress().unwrap();
+    let cb0 = CompressedRistretto::from_slice(&pi.barcode_ct.0).decompress().unwrap();
+    let cb1 = CompressedRistretto::from_slice(&pi.barcode_ct.1).decompress().unwrap();
+    let cs0_t = CompressedRistretto::from_slice(&pi.cs0_t).decompress().unwrap();
+    let cs1_t = CompressedRistretto::from_slice(&pi.cs1_t).decompress().unwrap();
+    let cb0_t = CompressedRistretto::from_slice(&pi.cb0_t).decompress().unwrap();
+    let cb1_t = CompressedRistretto::from_slice(&pi.cb1_t).decompress().unwrap();
+    let i_t = CompressedRistretto::from_slice(&pi.i_t).decompress().unwrap();
+    let m_z = Scalar::from_bytes_mod_order(pi.m_z);
+    let mp_z = Scalar::from_bytes_mod_order(pi.mp_z);
+    let ys_z = Scalar::from_bytes_mod_order(pi.ys_z);
+    let yb_z = Scalar::from_bytes_mod_order(pi.yb_z);
+    let hs = CompressedRistretto::from_slice(&pi.hs).decompress().unwrap();
+    let hb = CompressedRistretto::from_slice(&pi.hb).decompress().unwrap();
+
+    let check1 = g * &ys_z == cs0_t + cs0 * &c;
+    let check2 = g * &mp_z + hs*&ys_z == cs1_t + cs1 * &c;
+    let check3 = g * &yb_z == cb0_t + cb0 * &c;
+    let check4 = g * &m_z + hb * &yb_z == cb1_t + cb1 * &c;
+    let check5 = g * &m_z + g * &mp_z == i_t;
+
+    check1 && check2 && check3 && check4 && check5
 }
 
 /// A Python module implemented in Rust. The name of this function must match
@@ -144,5 +228,6 @@ fn _crypto(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(elgamal_enc, m)?)?;
     m.add_function(wrap_pyfunction!(elgamal_dec, m)?)?;
     m.add_function(wrap_pyfunction!(zk_ct_eq_prove, m)?)?;
+    m.add_function(wrap_pyfunction!(zk_ct_eq_verify, m)?)?;
     Ok(())
 }
