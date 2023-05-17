@@ -79,7 +79,7 @@ fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
             break m as i32;
         } else if &(Scalar::zero() - Scalar::from(m)) * G == mg {
             break -1 * (m as i32);
-        } else if m > 10000 {
+        } else if m > 1000000 {
             panic!("Looping too long");
         } {
             m += 1;
