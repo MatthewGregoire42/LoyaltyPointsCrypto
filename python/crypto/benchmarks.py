@@ -2,8 +2,8 @@ from crypto import *
 import _crypto
 import random, time
 
-N_USERS = 10000
-N_TXS = 40000
+N_USERS = 1000
+N_TXS = 4000
 N_DECS = 10
 
 print("++++++++++++++++++++++++++++++++++++++++++")
