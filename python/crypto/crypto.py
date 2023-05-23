@@ -6,12 +6,11 @@ import os
 import pickle
 
 class Server:
-    def __init__(self, testing=False):
+    def __init__(self):
         self.num_users = 0
         self.users = []
         self.merkle_tree = pymerkle.MerkleTree(algorithm='sha256', encoding='utf-8', security=True)
         self.tmp = {}
-        self.test = testing
     
     def register_user(self, barcode, pk_enc):
         init_balance = _crypto.elgamal_enc(pk_enc, 0)[:2]
@@ -32,16 +31,13 @@ class Server:
     Input: shopper user ID, commitment to a chosed random ID
     Output: a server-chosen random ID
     """
-    def process_tx_hello_response(self, uid, com, tx_id=None):
+    def process_tx_hello_response(self, uid, com):
         # Choose a random index to send to the client
         rng = SystemRandom()
         i_s = rng.randrange(0, self.num_users)
         # Create a temporary record of state for this transaction, indexed by
-        # the transaction ID number if testing and by the shopper UID otherwise.
-        if self.test:
-            self.tmp[tx_id] = {'i_s': i_s, 'com': com}
-        else:
-            self.tmp[uid] = {'i_s': i_s, 'com': com}
+        # the transaction ID number (client commitment)
+        self.tmp[com] = {'i_s': i_s}
         return i_s
 
     """
@@ -50,8 +46,8 @@ class Server:
     Input: shopper UID, opened commitment contents: client-chosen random ID and mask
     Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
     """
-    def process_tx_barcode_gen(self, uid, i_c, r, tx_id=None):
-        tmp = self.tmp[tx_id] if self.test else self.tmp[uid]
+    def process_tx_barcode_gen(self, i_c, r, tx_id):
+        tmp = self.tmp[tx_id]
 
         # Recompute commitment and check that it matches.
         digest = hashes.Hash(hashes.SHA256())
@@ -59,7 +55,7 @@ class Server:
         digest.update(r)
         com_test = digest.finalize()
 
-        if tmp['com'] != com_test:
+        if tx_id != com_test:
             print("Error")
             return
                 
@@ -74,8 +70,8 @@ class Server:
     """
     Step 3 of a transaction request
     """
-    def process_tx(self, shopper, cts, ctb, pi, tx_id=None):
-        tmp = self.tmp[tx_id] if self.test else self.tmp[shopper]
+    def process_tx(self, shopper, cts, ctb, pi, tx_id):
+        tmp = self.tmp[tx_id]
 
         if (not _crypto.zk_ct_eq_verify(pi)):
             print("Error")
@@ -87,10 +83,7 @@ class Server:
         self.users[barcode]['balance'] = _crypto.add_ciphertexts(self.users[barcode]['balance'], ctb)
 
         # Clear the temporary state for this transaction
-        if self.test:
-            del self.tmp[tx_id]
-        else:
-            del self.tmp[shopper]
+        del self.tmp[tx_id]
 
     def settle_balance_hello(self, uid):
         return self.users[uid]['balance']
@@ -99,13 +92,12 @@ class Server:
         return _crypto.zk_ct_dec_verify(pi)
 
 class Client:
-    def __init__(self, barcode, testing=False):
+    def __init__(self, barcode):
         self.sk_enc, self.pk_enc = _crypto.elgamal_keygen()
         self.barcode = barcode
         self.num_users = 1
         self.merkle_root = None
         self.tmp = {}
-        self.test = testing
 
     
     def register_with_server(self):
@@ -121,7 +113,7 @@ class Client:
     Input: N/A
     Output: commitment to a randomly chosen user ID
     """
-    def process_tx_hello(self, tx_id=None):
+    def process_tx_hello(self):
         # Commit to a random index and send it to the server
         rng = SystemRandom()
         i_c = rng.randrange(0, self.num_users)
@@ -134,10 +126,8 @@ class Client:
 
         # Temporarily store state relevant to this transaction. For testing purposes, we require
         # the client to be able to have multiple in-process transactions at the same time.
-        if (self.test):
-            self.tmp[tx_id] = {'i_c': i_c, 'r': r}
-        else:
-            self.tmp = {'i_c': i_c, 'r': r}
+        tx_id = com
+        self.tmp[tx_id] = {'i_c': i_c, 'r': r}
 
         return com
     
@@ -147,8 +137,8 @@ class Client:
     Input: server's randomly chosen barcode UID
     Output: opened commitment to client-chosed barcode UID
     """
-    def process_tx_compute_id(self, i_s, tx_id=None):
-        tmp = self.tmp[tx_id] if self.test else self.tmp
+    def process_tx_compute_id(self, i_s, tx_id):
+        tmp = self.tmp[tx_id]
 
         i = (tmp['i_c'] + i_s) % self.num_users
 
@@ -158,8 +148,8 @@ class Client:
     """
     Step 3 of a transaction request
     """
-    def process_tx(self, pi, barcode, points, pkb, tx_id=None):
-        tmp = self.tmp[tx_id] if self.test else self.tmp
+    def process_tx(self, pi, barcode, points, pkb, tx_id):
+        tmp = self.tmp[tx_id]
 
         # Verify Merkle proof that the agreed upon index is in the tree
         bid = tmp['uid_b']
@@ -176,10 +166,7 @@ class Client:
         pi = _crypto.zk_ct_eq_prove(cts_data, ctb_data)
 
         # Clear temporary state for this transaction
-        if self.test:
-            del self.tmp[tx_id]
-        else:
-            self.tmp = {}
+        del self.tmp[tx_id]
 
         return cts[:2], ctb[:2], pi
 
