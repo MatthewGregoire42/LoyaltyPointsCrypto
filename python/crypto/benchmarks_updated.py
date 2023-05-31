@@ -1,6 +1,7 @@
 import _crypto
 from crypto import *
 import random, time
+import gc
 
 # Round to thousandths (3 decimal points) of a millisecond
 def round_to_3(num):
@@ -16,7 +17,7 @@ print("---------------------------")
 points_client, points_server = 0, 0
 base_client, base_server = 0, 0
 
-n_clients = 10000
+n_clients = 10
 for handle_points in (True, False):
     server = Server(handle_points=handle_points)
     clients = []
@@ -54,8 +55,8 @@ print("--- Transaction Processing ---")
 print("------------------------------")
 
 n_txs = 500
-max_users = 50000
-min_users = 5000
+max_users = 10
+min_users = 10
 step = 5000
     
 # Initialize a system with a certain number of users,
@@ -192,6 +193,7 @@ step = 25
 print("Points\tClient settle time\tServer settle time")
 for points in range(min_points, max_points+1, step):
 
+    points = max_points - points
     server = Server(handle_points=True)
     client = Client(barcode=0, handle_points=True)
     server.register_user(*client.register_with_server())
@@ -203,16 +205,29 @@ for points in range(min_points, max_points+1, step):
 
     # Repeat the settle procedure <n_settles> times
     proofs = []
-    start = time.time()
+    total = 0
     for i in range(n_settles):
+        gc.collect()
+        start = time.time()
         plaintext, pi = client.settle_balance(balance)
         proofs.append((plaintext, pi))
-    client_settle_time = time.time() - start
+        runtime = time.time() - start
+        total += runtime
+        print(round_to_3(1000*runtime), end=' ')
+    print('')
+    client_settle_time = total
 
+    total = 0
     start = time.time()
     for i in range(n_settles):
+        gc.collect()
+        start = time.time()
         server.settle_balance_finalize(*proofs[i])
-    server_settle_time = time.time() - start
+        runtime = time.time() - start
+        print(round_to_3(1000*runtime), end=' ')
+        total += runtime
+    print('')
+    server_settle_time = total
 
     print("{:<8}{:<24}{}".format(points, round_to_3(1000 * client_settle_time/n_settles),
                                          round_to_3(1000 * server_settle_time/n_settles)))
