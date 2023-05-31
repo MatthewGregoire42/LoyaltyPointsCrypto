@@ -2,23 +2,57 @@ import _crypto
 from cryptography.hazmat.primitives import hashes
 import pymerkle
 from random import SystemRandom
-import os
+import os, sys
 import pickle
+import random
+
+def compress(obj):
+    def helper(obj, result):
+        if type(obj) is tuple or type(obj) is list:
+            for x in obj:
+                result = result + helper(x, bytearray(bytes(0)))
+        elif type(obj) is int:
+            result = bytearray(bytes(obj.to_bytes(1, 'big')))
+        return bytes(result)
+    return helper(obj, bytearray(bytes(0)))
+
+def decompress_to_list(bytes_obj):
+    result = []
+    for i in range(len(bytes_obj)):
+        result.append(int.from_bytes(bytes_obj[i], 'big'))
+    return result
+
+def decompress_to_ciphertext(bytes_obj):
+    c1 = []
+    for i in range(0, 32):
+        c1.append(int.from_bytes(bytes_obj[i], 'big'))
+    c2 = []
+    for i in range(32, 64):
+        c2.append(int.from_bytes(bytes_obj[i], 'big'))
+    return (c1, c2)
+
 
 class Server:
-    def __init__(self):
+    def __init__(self, handle_points=True):
         self.num_users = 0
         self.users = []
         self.merkle_tree = pymerkle.MerkleTree(algorithm='sha256', encoding='utf-8', security=True)
         self.tmp = {}
+        self.handle_points = handle_points
     
-    def register_user(self, barcode, pk_enc):
-        init_balance = _crypto.elgamal_enc(pk_enc, 0)[:2]
-        self.users.append({'barcode': barcode,
-                           'uid': self.num_users,
-                           'balance': init_balance,
-                           'pk_enc': pk_enc})
-        self.merkle_tree.append_entry(pickle.dumps((self.num_users, barcode, pk_enc)))
+    def register_user(self, barcode, pk_enc=None): # TODO: decompress pk_enc
+        if self.handle_points:
+            init_balance = _crypto.elgamal_enc(pk_enc, 0)[:2]
+            self.users.append({'barcode': barcode,
+                            'uid': self.num_users,
+                            'balance': init_balance,
+                            'pk_enc': pk_enc})
+            user_record = (self.num_users, barcode, pk_enc)
+        else:
+            self.users.append({'barcode': barcode,
+                               'uid': self.num_users})
+            user_record = (self.num_users, barcode)
+        self.merkle_tree.append_entry(pickle.dumps(user_record))
         self.num_users += 1
     
     # Used to update clients about necessary public state information
@@ -31,7 +65,7 @@ class Server:
     Input: shopper user ID, commitment to a chosed random ID
     Output: a server-chosen random ID
     """
-    def process_tx_hello_response(self, uid, com):
+    def process_tx_hello_response(self, com):
         # Choose a random index to send to the client
         rng = SystemRandom()
         i_s = rng.randrange(0, self.num_users)
@@ -62,10 +96,20 @@ class Server:
         uid_b = (i_c + tmp['i_s']) % self.num_users
 
         tmp['uid_b'] = uid_b
-        barcode, pk_b = self.users[uid_b]['barcode'], self.users[uid_b]['pk_enc']
-        pi = self.merkle_tree.prove_inclusion(pickle.dumps((uid_b, barcode, pk_b)))
 
-        return uid_b, barcode, pk_b, pi
+        if self.handle_points:
+            barcode, pk_b = self.users[uid_b]['barcode'], self.users[uid_b]['pk_enc']
+            user_record = (uid_b, barcode, pk_b)
+        else:
+            barcode = self.users[uid_b]['barcode']
+            user_record = (uid_b, barcode)
+
+        pi = self.merkle_tree.prove_inclusion(pickle.dumps(user_record))
+
+        if self.handle_points:
+            return uid_b, barcode, pk_b, pi
+        else:
+            return uid_b, barcode, pi
 
     """
     Step 3 of a transaction request
@@ -92,12 +136,19 @@ class Server:
         return _crypto.zk_ct_dec_verify(pi)
 
 class Client:
-    def __init__(self, barcode):
-        self.sk_enc, self.pk_enc = _crypto.elgamal_keygen()
+    def __init__(self, barcode, handle_points=True):
+        self.handle_points = handle_points
         self.barcode = barcode
         self.num_users = 1
         self.merkle_root = None
         self.tmp = {}
+
+        if handle_points:
+            self.sk_enc, self.pk_enc = _crypto.elgamal_keygen()
+            with open('./scratchpad.txt', 'wb') as file:
+                file.write(pickle.dumps(self.pk_enc))
+        else:
+            self.pk_enc = None
 
     
     def register_with_server(self):
@@ -117,7 +168,7 @@ class Client:
         # Commit to a random index and send it to the server
         rng = SystemRandom()
         i_c = rng.randrange(0, self.num_users)
-        r = os.urandom(8)
+        r = os.urandom(64)
         digest = hashes.Hash(hashes.SHA256())
         digest.update(bytes(i_c))
         digest.update(r)
@@ -144,6 +195,16 @@ class Client:
 
         tmp['uid_b'] = i
         return tmp['i_c'], tmp['r']
+
+    def verify_merkle_proof(self, barcode, pi, tx_id, pkb=None):
+        bid = self.tmp[tx_id]['uid_b']
+        if self.handle_points:
+            pymerkle.verify_inclusion(pickle.dumps((bid, barcode, pkb)), self.merkle_root, pi)
+        else:
+            # If we don't need to handle points, we just need to verify the proof and
+            # this is the last function we call.
+            pymerkle.verify_inclusion(pickle.dumps((bid, barcode)), self.merkle_root, pi)
+            del self.tmp[tx_id]
         
     """
     Step 3 of a transaction request
@@ -152,8 +213,7 @@ class Client:
         tmp = self.tmp[tx_id]
 
         # Verify Merkle proof that the agreed upon index is in the tree
-        bid = tmp['uid_b']
-        pymerkle.verify_inclusion(pickle.dumps((bid, barcode, pkb)), self.merkle_root, pi)
+        self.verify_merkle_proof(barcode, pi, tx_id, pkb)
 
         # Encrypt the number of points under both public keys
         cts = _crypto.elgamal_enc(self.pk_enc, -1*points)

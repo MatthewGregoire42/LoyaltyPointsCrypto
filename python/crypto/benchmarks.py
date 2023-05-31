@@ -2,16 +2,16 @@ from crypto import *
 import _crypto
 import random, time
 
-N_USERS = 1000
-N_TXS = 4000
-N_DECS = 10
+N_USERS = 100
+N_TXS = 100
+N_DECS = 1
 
 print("++++++++++++++++++++++++++++++++++++++++++")
 print("Number of users:", N_USERS)
 print("Number of transactions performed:", N_TXS)
 print("++++++++++++++++++++++++++++++++++++++++++")
 
-server = Server(testing=True)
+server = Server()
 clients = []
 
 # Register users
@@ -22,7 +22,7 @@ client_init_start = time.time()
 # ------------------------------------------
 for i in range(N_USERS):
     barcode = random.randint(0, 10000000000)
-    client = Client(barcode, testing=True)
+    client = Client(barcode)
     clients.append(client)
 # ------------------------------------------
 client_init_time = time.time() - client_init_start
@@ -64,7 +64,7 @@ transaction_c1_start = time.time()
 for i in range(N_TXS):
     shopper_uid = txs[i]['uid_s']
     shopper_client = clients[shopper_uid]
-    com = shopper_client.process_tx_hello(tx_id=i)
+    com = shopper_client.process_tx_hello()
     txs[i]['com'] = com
 # ------------------------------------------
 transaction_c1_time = time.time() - transaction_c1_start
@@ -78,7 +78,7 @@ transaction_s1_start = time.time()
 # ------------------------------------------
 for i in range(N_TXS):
     shopper_uid, com = txs[i]['uid_s'], txs[i]['com']
-    i_s = server.process_tx_hello_response(shopper_uid, com, tx_id=i)
+    i_s = server.process_tx_hello_response(shopper_uid, com)
     txs[i]['i_s'] = i_s
 # ------------------------------------------
 transaction_s1_time = time.time() - transaction_s1_start
@@ -91,9 +91,9 @@ print("------------------------------------------")
 transaction_c2_start = time.time()
 # ------------------------------------------
 for i in range(N_TXS):
-    shopper_uid, i_s = txs[i]['uid_s'], txs[i]['i_s']
+    shopper_uid, i_s, com = txs[i]['uid_s'], txs[i]['i_s'], txs[i]['com']
     shopper_client = clients[shopper_uid]
-    i_c, r = shopper_client.process_tx_compute_id(i_s, tx_id=i)
+    i_c, r = shopper_client.process_tx_compute_id(i_s, com)
     txs[i]['i_c'], txs[i]['r'] = i_c, r
 # ------------------------------------------
 transaction_c2_time = time.time() - transaction_c2_start
@@ -106,8 +106,8 @@ print("------------------------------------------")
 transaction_s2_start = time.time()
 # ------------------------------------------
 for i in range(N_TXS):
-    shopper_uid, i_c, r = txs[i]['uid_s'], txs[i]['i_c'], txs[i]['r']
-    uid_b, barcode, pk_b, pi = server.process_tx_barcode_gen(shopper_uid, i_c, r, tx_id=i)
+    shopper_uid, i_c, r, com = txs[i]['uid_s'], txs[i]['i_c'], txs[i]['r'], txs[i]['com']
+    uid_b, barcode, pk_b, pi = server.process_tx_barcode_gen(i_c, r, com)
     txs[i]['uid_b'], txs[i]['barcode'], txs[i]['pk_b'], txs[i]['pi'] = uid_b, barcode, pk_b, pi
 # ------------------------------------------
 transaction_s2_time = time.time() - transaction_s2_start
@@ -120,9 +120,9 @@ print("------------------------------------------")
 transaction_c3_start = time.time()
 # ------------------------------------------
 for i in range(N_TXS):
-    shopper_uid, pi, barcode, points_used, pk_b = txs[i]['uid_s'], txs[i]['pi'], txs[i]['barcode'], txs[i]['points'], txs[i]['pk_b']
+    shopper_uid, pi, barcode, points_used, pk_b, com = txs[i]['uid_s'], txs[i]['pi'], txs[i]['barcode'], txs[i]['points'], txs[i]['pk_b'], txs[i]['com']
     shopper_client = clients[shopper_uid]
-    cts, ctb, pi = shopper_client.process_tx(pi, barcode, points_used, pk_b, tx_id=i)
+    cts, ctb, pi = shopper_client.process_tx(pi, barcode, points_used, pk_b, com)
     txs[i]['cts'], txs[i]['ctb'], txs[i]['pi'] = cts, ctb, pi
 # ------------------------------------------
 transaction_c3_time = time.time() - transaction_c2_start
@@ -135,8 +135,8 @@ print("------------------------------------------")
 transaction_s3_start = time.time()
 # ------------------------------------------
 for i in range(N_TXS):
-    shopper_uid, cts, ctb, pi = txs[i]['uid_s'], txs[i]['cts'], txs[i]['ctb'], txs[i]['pi']
-    server.process_tx(shopper_uid, cts, ctb, pi, tx_id=i)
+    shopper_uid, cts, ctb, pi, com = txs[i]['uid_s'], txs[i]['cts'], txs[i]['ctb'], txs[i]['pi'], txs[i]['com']
+    server.process_tx(shopper_uid, cts, ctb, pi, com)
 # ------------------------------------------
 transaction_s3_time = time.time() - transaction_s3_start
 print("Time for server to verify ZK proofs for", N_TXS, "transactions:", transaction_s3_time)
@@ -187,7 +187,7 @@ print("******************************************")
 print("Decryption times by number of points")
 print("Average over", N_DECS, "iterations")
 
-max_points = 1000
+max_points = 100
 
 cts = []
 sk, pk = _crypto.elgamal_keygen()
@@ -195,7 +195,7 @@ sk, pk = _crypto.elgamal_keygen()
 for i in range(max_points+1):
     cts.append(_crypto.elgamal_enc(pk, i)[:2])
 
-for i in range(max_points+1):
+for i in range(0, max_points+1, 10):
     ct = cts[i]
     # ------------------------------------------
     dec_start = time.time()
