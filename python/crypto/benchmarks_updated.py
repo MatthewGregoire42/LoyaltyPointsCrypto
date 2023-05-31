@@ -17,7 +17,7 @@ points_client, points_server = 0, 0
 base_client, base_server = 0, 0
 
 n_clients = 10000
-for handle_points in [True]:
+for handle_points in (True, False):
     server = Server(handle_points=handle_points)
     clients = []
 
@@ -53,15 +53,16 @@ print("------------------------------")
 print("--- Transaction Processing ---")
 print("------------------------------")
 
-n_txs = 200
-max_users = 5000
-min_users = 50000
+n_txs = 500
+max_users = 50000
+min_users = 5000
 step = 5000
     
 # Initialize a system with a certain number of users,
 # and time how long it takes to process <n_txs> transactions
 print("Users\tBase client\tBase server\tPoints client\tPoints server")
 for n_users in range(min_users, max_users+1, step):
+    print(n_users)
     
     # Record of how long it takes
     points_client, points_server = 0, 0
