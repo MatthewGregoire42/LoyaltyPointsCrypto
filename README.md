@@ -1,12 +1,12 @@
 This code accompanies the paper CheckOut: User-Controlled Anonymization for Supermarket Loyalty Programs.
 
-Raw data collected in our evaluation is reported in `data_client.txt` and `data_server.txt`. Client measurements were taken on a Moto G Stylus 5G running Android 11, and server measurements were taken on an Intel Core i7 @ 3.60 GHz running Ubuntu 20.04.6 LTS.
+Raw data collected in our evaluation is reported in `data_client.txt` and `data_server.txt`. Client measurements were taken on a Moto G Stylus 5G phone running Android 11, and server measurements were taken on a server with an Intel Core i7-11700K processor @ 3.60 GHz running Ubuntu 20.04.6 LTS.
 
 ## Installation
 
 To run the code, first rename the parent directory from `LoyaltyPointsCrypto` to `crypto`. The project is built in Rust and Python, and has the following dependencies:
 
-* Maturin. To install, follow the instructions at https://www.maturin.rs/tutorial.html. Before installing the following Python libraries, start a Python virtual environment as described at the link.
+* Maturin. To install, follow the instructions at https://www.maturin.rs/tutorial.html. Before installing the following Python libraries, start a Python virtual environment as described in the tutorial.
 * Cryptography (Python library): https://cryptography.io/en/latest/
 * Pymerkle: https://github.com/fmerg/pymerkle
 
