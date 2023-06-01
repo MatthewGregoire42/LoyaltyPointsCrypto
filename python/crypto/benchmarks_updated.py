@@ -62,7 +62,6 @@ step = 5000
 # and time how long it takes to process <n_txs> transactions
 print("Users\tBase client\tBase server\tPoints client\tPoints server")
 for n_users in range(min_users, max_users+1, step):
-    print(n_users)
     
     # Record of how long it takes
     points_client, points_server = 0, 0
