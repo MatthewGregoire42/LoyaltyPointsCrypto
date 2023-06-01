@@ -2,35 +2,8 @@ import _crypto
 from cryptography.hazmat.primitives import hashes
 import pymerkle
 from random import SystemRandom
-import os, sys
+import os
 import pickle
-import random
-
-def compress(obj):
-    def helper(obj, result):
-        if type(obj) is tuple or type(obj) is list:
-            for x in obj:
-                result = result + helper(x, bytearray(bytes(0)))
-        elif type(obj) is int:
-            result = bytearray(bytes(obj.to_bytes(1, 'big')))
-        return bytes(result)
-    return helper(obj, bytearray(bytes(0)))
-
-def decompress_to_list(bytes_obj):
-    result = []
-    for i in range(len(bytes_obj)):
-        result.append(int.from_bytes(bytes_obj[i], 'big'))
-    return result
-
-def decompress_to_ciphertext(bytes_obj):
-    c1 = []
-    for i in range(0, 32):
-        c1.append(int.from_bytes(bytes_obj[i], 'big'))
-    c2 = []
-    for i in range(32, 64):
-        c2.append(int.from_bytes(bytes_obj[i], 'big'))
-    return (c1, c2)
-
 
 class Server:
     def __init__(self, handle_points=True):
@@ -40,7 +13,7 @@ class Server:
         self.tmp = {}
         self.handle_points = handle_points
     
-    def register_user(self, barcode, pk_enc=None): # TODO: decompress pk_enc
+    def register_user(self, barcode, pk_enc=None):
         if self.handle_points:
             init_balance = _crypto.elgamal_enc(pk_enc, 0)[:2]
             self.users.append({'barcode': barcode,
