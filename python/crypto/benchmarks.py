@@ -1,209 +1,217 @@
-from crypto import *
 import _crypto
+from crypto import *
 import random, time
 
-N_USERS = 100
-N_TXS = 100
-N_DECS = 1
+# Round to thousandths (3 decimal points) of a millisecond
+def round_to_3(num):
+        return round(num, 3)
 
-print("++++++++++++++++++++++++++++++++++++++++++")
-print("Number of users:", N_USERS)
-print("Number of transactions performed:", N_TXS)
-print("++++++++++++++++++++++++++++++++++++++++++")
+""" Time client registration for both versions, averaging over
+    <n_clients> """
+print("---------------------------")
+print("--- Client Registration ---")
+print("---------------------------")
 
-server = Server()
-clients = []
+# Record of how long it takes
+points_client, points_server = 0, 0
+base_client, base_server = 0, 0
 
-# Register users
-print("User registration")
-print("******************************************")
-# ------------------------------------------
-client_init_start = time.time()
-# ------------------------------------------
-for i in range(N_USERS):
-    barcode = random.randint(0, 10000000000)
-    client = Client(barcode)
-    clients.append(client)
-# ------------------------------------------
-client_init_time = time.time() - client_init_start
-print("Time to intialize", N_USERS, "users:", client_init_time)
-print("Average:", client_init_time/N_USERS)
-print("------------------------------------------")
-# ------------------------------------------
+n_clients = 10000
+for handle_points in (True, False):
+    server = Server(handle_points=handle_points)
+    clients = []
 
-# ------------------------------------------
-client_register_start = time.time()
-# ------------------------------------------
-for i in range(N_USERS):
-    server.register_user(*clients[i].register_with_server())
-# ------------------------------------------
-client_init_time = time.time() - client_init_start
-print("Time to register", N_USERS, "users:", client_init_time)
-print("Average:", client_init_time/N_USERS)
-print("------------------------------------------")
-# ------------------------------------------
+    start = time.time()
+    for i in range(n_clients):
+        barcode = random.randint(0, 10000000000)
+        client = Client(barcode, handle_points=handle_points)
+        clients.append(client)
+    if handle_points:
+        points_client = time.time() - start
+    else:
+        base_client = time.time() - start
+    
+    start = time.time()
+    for client in clients:
+        server.register_user(*client.register_with_server())
+    if handle_points:
+        points_server = time.time() - start
+    else:
+        base_server = time.time() - start
 
-# Update all shoppers to get an updated view of the system
-server_state = server.share_state()
-for i in range(N_USERS):
-    clients[i].update_state(*server_state)
+base_client_avg = round_to_3(1000 * base_client/n_clients)
+base_server_avg = round_to_3(1000 * base_server/n_clients)
+points_client_avg = round_to_3(1000 * points_client/n_clients)
+points_server_avg = round_to_3(1000 * points_server/n_clients)
+print("Base client\tBase server\tPoints client\tPoints server")
+print("{:<16}{:<16}{:<16}{:<16}".format(base_client_avg, base_server_avg,
+                                        points_client_avg, points_server_avg))
 
-# Generate a transcript of (shopper, points) pairs, representing a transaction
-# initiated by 'shopper' and using 'points' loyalty points
-txs = []
-for i in range(N_TXS):
-    shopper_uid = random.randint(0, N_USERS-1)
-    points_used = random.randint(0, 300)
-    txs.append({'uid_s': shopper_uid, 'points': points_used})
+""" Time transaction processing time for both versions of the protocol,
+    varying the number of users of the system from 5000 to 50,000. """
+print("------------------------------")
+print("--- Transaction Processing ---")
+print("------------------------------")
 
-print("Transaction processing")
-print("******************************************")
-# ------------------------------------------
-transaction_c1_start = time.time()
-# ------------------------------------------
-for i in range(N_TXS):
-    shopper_uid = txs[i]['uid_s']
-    shopper_client = clients[shopper_uid]
-    com = shopper_client.process_tx_hello()
-    txs[i]['com'] = com
-# ------------------------------------------
-transaction_c1_time = time.time() - transaction_c1_start
-print("Time for clients to generate commitments for", N_TXS, "transactions:", transaction_c1_time)
-print("Average:", transaction_c1_time/N_TXS)
-print("------------------------------------------")
-# ------------------------------------------
+n_txs = 500
+max_users = 50000
+min_users = 5000
+step = 5000
+    
+# Initialize a system with a certain number of users,
+# and time how long it takes to process <n_txs> transactions
+print("Users\tBase client\tBase server\tPoints client\tPoints server")
+for n_users in range(min_users, max_users+1, step):
+    
+    # Record of how long it takes
+    points_client, points_server = 0, 0
+    base_client, base_server = 0, 0
+    for handle_points in (True, False):
+        server = Server(handle_points=handle_points)
 
-# ------------------------------------------
-transaction_s1_start = time.time()
-# ------------------------------------------
-for i in range(N_TXS):
-    shopper_uid, com = txs[i]['uid_s'], txs[i]['com']
-    i_s = server.process_tx_hello_response(shopper_uid, com)
-    txs[i]['i_s'] = i_s
-# ------------------------------------------
-transaction_s1_time = time.time() - transaction_s1_start
-print("Time for server to respond with randomness for", N_TXS, "transactions:", transaction_s1_time)
-print("Average:", transaction_s1_time/N_TXS)
-print("------------------------------------------")
-# ------------------------------------------
+        # Initialise n_users clients and register with server
+        clients = []
+        for i in range(n_users):
+            barcode = random.randint(0, 10000000000)
+            client = Client(barcode, handle_points=handle_points)
+            clients.append(client)
+            server.register_user(*client.register_with_server())
+        
+        # Inform every user of the new merkle root
+        for i in range(n_users):
+            clients[i].update_state(*server.share_state())
+        
+        # Process transactions
+        txs = []
+        for i in range(n_txs):
+            shopper_uid = random.randint(0, n_users-1)
+            points_used = random.randint(0, 300)
+            txs.append({'uid_s': shopper_uid, 'points': points_used})
 
-# ------------------------------------------
-transaction_c2_start = time.time()
-# ------------------------------------------
-for i in range(N_TXS):
-    shopper_uid, i_s, com = txs[i]['uid_s'], txs[i]['i_s'], txs[i]['com']
-    shopper_client = clients[shopper_uid]
-    i_c, r = shopper_client.process_tx_compute_id(i_s, com)
-    txs[i]['i_c'], txs[i]['r'] = i_c, r
-# ------------------------------------------
-transaction_c2_time = time.time() - transaction_c2_start
-print("Time for client to compute barcode and reveal commitments for", N_TXS, "transactions:", transaction_c2_time)
-print("Average:", transaction_c2_time/N_TXS)
-print("------------------------------------------")
-# ------------------------------------------
+        # -----------------------------
+        start = time.time()
+        for tx in txs:
+            shopper = clients[tx['uid_s']]
+            com = shopper.process_tx_hello()
+            tx['com'] = com
+        if handle_points:
+            points_client += time.time() - start
+        else:
+            base_client += time.time() - start
+        # -----------------------------
+        
+        # -----------------------------
+        start = time.time()
+        for tx in txs:
+            com = tx['com']
+            i_s = server.process_tx_hello_response(com)
+            tx['i_s'] = i_s
+        if handle_points:
+            points_server += time.time() - start
+        else:
+            base_server += time.time() - start
+        # -----------------------------
 
-# ------------------------------------------
-transaction_s2_start = time.time()
-# ------------------------------------------
-for i in range(N_TXS):
-    shopper_uid, i_c, r, com = txs[i]['uid_s'], txs[i]['i_c'], txs[i]['r'], txs[i]['com']
-    uid_b, barcode, pk_b, pi = server.process_tx_barcode_gen(i_c, r, com)
-    txs[i]['uid_b'], txs[i]['barcode'], txs[i]['pk_b'], txs[i]['pi'] = uid_b, barcode, pk_b, pi
-# ------------------------------------------
-transaction_s2_time = time.time() - transaction_s2_start
-print("Time for server to compute barcode and merkle proof for", N_TXS, "transactions:", transaction_s2_time)
-print("Average:", transaction_s2_time/N_TXS)
-print("------------------------------------------")
-# ------------------------------------------
+        # -----------------------------
+        start = time.time()
+        for tx in txs:
+            i_s, com = tx['i_s'], tx['com']
+            shopper = clients[tx['uid_s']]
+            i_c, r = shopper.process_tx_compute_id(i_s, com)
+            tx['i_c'] = i_c
+            tx['r'] = r
+        if handle_points:
+            points_client += time.time() - start
+        else:
+            base_client += time.time() - start
+        # -----------------------------
+        
+        # -----------------------------
+        start = time.time()
+        if handle_points:
+            for tx in txs:
+                i_c, r, com = tx['i_c'], tx['r'], tx['com']
+                uid_b, barcode, pk_b, pi = server.process_tx_barcode_gen(i_c, r, com)
+                tx['uid_b'], tx['barcode'], tx['pk_b'], tx['pi'] = uid_b, barcode, pk_b, pi
+            points_server += time.time() - start
+        else:
+            for tx in txs:
+                i_c, r, com = tx['i_c'], tx['r'], tx['com']
+                uid_b, barcode, pi = server.process_tx_barcode_gen(i_c, r, com)
+                tx['uid_b'], tx['barcode'], tx['pi'] = uid_b, barcode, pi
+            base_server += time.time() - start
+        # -----------------------------
 
-# ------------------------------------------
-transaction_c3_start = time.time()
-# ------------------------------------------
-for i in range(N_TXS):
-    shopper_uid, pi, barcode, points_used, pk_b, com = txs[i]['uid_s'], txs[i]['pi'], txs[i]['barcode'], txs[i]['points'], txs[i]['pk_b'], txs[i]['com']
-    shopper_client = clients[shopper_uid]
-    cts, ctb, pi = shopper_client.process_tx(pi, barcode, points_used, pk_b, com)
-    txs[i]['cts'], txs[i]['ctb'], txs[i]['pi'] = cts, ctb, pi
-# ------------------------------------------
-transaction_c3_time = time.time() - transaction_c2_start
-print("Time for client to verify merkle proof and compute encryptions and ZK proofs for", N_TXS, "transactions:", transaction_c3_time)
-print("Average:", transaction_c3_time/N_TXS)
-print("------------------------------------------")
-# ------------------------------------------
+        # -----------------------------
+        start = time.time()
+        if handle_points:
+            for tx in txs:
+                shopper = clients[tx['uid_s']]
+                pi, barcode, points_used, pk_b, com = tx['pi'], tx['barcode'], tx['points'], tx['pk_b'], tx['com']
+                cts, ctb, pi = shopper.process_tx(pi, barcode, points_used, pk_b, com)
+                tx['cts'], tx['ctb'], tx['pi'] = cts, ctb, pi
+            points_client += time.time() - start
+        else:
+            for tx in txs:
+                shopper = clients[tx['uid_s']]
+                barcode, pi, com = tx['barcode'], tx['pi'], tx['com']
+                shopper.verify_merkle_proof(barcode, pi, com)
+            base_client += time.time() - start
+        # -----------------------------
 
-# ------------------------------------------
-transaction_s3_start = time.time()
-# ------------------------------------------
-for i in range(N_TXS):
-    shopper_uid, cts, ctb, pi, com = txs[i]['uid_s'], txs[i]['cts'], txs[i]['ctb'], txs[i]['pi'], txs[i]['com']
-    server.process_tx(shopper_uid, cts, ctb, pi, com)
-# ------------------------------------------
-transaction_s3_time = time.time() - transaction_s3_start
-print("Time for server to verify ZK proofs for", N_TXS, "transactions:", transaction_s3_time)
-print("Average:", transaction_s3_time/N_TXS)
-print("------------------------------------------")
-# ------------------------------------------
+        # Finish the protocol if we're handling points
+        # -----------------------------
+        if handle_points:
+            start = time.time()
+            for tx in txs:
+                shopper_uid, cts, ctb, pi, com = tx['uid_s'], tx['cts'], tx['ctb'], tx['pi'], tx['com']
+                server.process_tx(shopper_uid, cts, ctb, pi, com)
+            points_server += time.time() - start
+        # -----------------------------
+    
+    base_client_avg = round_to_3(1000 * base_client/n_txs)
+    base_server_avg = round_to_3(1000 * base_server/n_txs)
+    points_client_avg = round_to_3(1000 * points_client/n_txs)
+    points_server_avg = round_to_3(1000 * points_server/n_txs)
+    print("{:<8}{:<16}{:<16}{:<16}{:<16}".format(n_users, base_client_avg, base_server_avg,
+                                      points_client_avg, points_server_avg))
+    
 
-# Settle balances
+""" Time balance settling time for the point tracking version of the protocol,
+    varying the number of points in a balance from 0 to 1000. """
+print("------------------------")
+print("--- Balance Settling ---")
+print("------------------------")
 
-balances = []
-for uid in range(N_USERS):
-    balance = server.settle_balance_hello(uid)
-    balances.append(balance)
+n_settles = 10
+min_points = 0
+max_points = 1000
+step = 25
 
-pt_pis = []
-print("Balance settling")
-print("******************************************")
-# ------------------------------------------
-settle_client_start = time.time()
-# ------------------------------------------
-for uid in range(N_USERS):
-    client = clients[uid]
-    balance = balances[uid]
-    plaintext, pi = client.settle_balance(balance)
-    pt_pis.append((plaintext, pi))
-    # server.settle_balance_finalize(plaintext, pi)
-# ------------------------------------------
-settle_client_time = time.time() - settle_client_start
-print("Time for clients to decrypt and make ZK proofs for ", N_TXS, "transactions between", N_USERS, "users:", settle_client_time)
-print("Average per user:", settle_client_time/N_USERS)
-print("------------------------------------------")
-# ------------------------------------------
+print("Points\tClient settle time\tServer settle time")
+for points in range(min_points, max_points+1, step):
 
-# ------------------------------------------
-settle_server_start = time.time()
-# ------------------------------------------
-for uid in range(N_USERS):
-    plaintext, pi = pt_pis[uid]
-    server.settle_balance_finalize(plaintext, pi)
-# ------------------------------------------
-settle_server_time = time.time() - settle_server_start
-print("Time for server to verify ZK proofs for ", N_USERS, "balance settlements:", settle_server_time)
-print("Average per user:", settle_server_time/N_USERS)
-# ------------------------------------------
+    server = Server(handle_points=True)
+    client = Client(barcode=0, handle_points=True)
+    server.register_user(*client.register_with_server())
 
-print("******************************************")
-print("******************************************")
-print("Decryption times by number of points")
-print("Average over", N_DECS, "iterations")
+    # Insert the correct number of points into the client's account
+    ct = _crypto.elgamal_enc(client.pk_enc, points)[:2]
+    server.users[0]['balance'] = _crypto.add_ciphertexts(server.users[0]['balance'], ct)
+    balance = server.settle_balance_hello(0)
 
-max_points = 100
+    # Repeat the settle procedure <n_settles> times
+    proofs = []
+    start = time.time()
+    for i in range(n_settles):
+        plaintext, pi = client.settle_balance(balance)
+        proofs.append((plaintext, pi))
+    client_settle_time = time.time() - start
 
-cts = []
-sk, pk = _crypto.elgamal_keygen()
-# Encrypt all possible point values from 0 to 1000
-for i in range(max_points+1):
-    cts.append(_crypto.elgamal_enc(pk, i)[:2])
+    start = time.time()
+    for i in range(n_settles):
+        server.settle_balance_finalize(*proofs[i])
+    server_settle_time = time.time() - start
 
-for i in range(0, max_points+1, 10):
-    ct = cts[i]
-    # ------------------------------------------
-    dec_start = time.time()
-    # ------------------------------------------
-    # Repeat decryption multiple times to get a more accurate measurement
-    for j in range(N_DECS):
-        pt = _crypto.elgamal_dec(sk, ct)
-    # ------------------------------------------
-    dec_time = time.time() - dec_start
-    print(i, dec_time/N_DECS)
-    # ------------------------------------------
+    print("{:<8}{:<24}{}".format(points, round_to_3(1000 * client_settle_time/n_settles),
+                                         round_to_3(1000 * server_settle_time/n_settles)))

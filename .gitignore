@@ -1,3 +1,5 @@
 /target
 /Cargo.lock
 /.venv/*
+/python/crypto/__pycache__
+/python/crypto/_crypto.abi3.so
