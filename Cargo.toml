@@ -13,7 +13,4 @@ crate-type = ["cdylib"]
 curve25519-dalek = "3"
 rand_core = "0.5"
 sha2 = "0.9"
-
-[dependencies.pyo3]
-version = "0.18.3"
-features = ["abi3-py37"]
+rs_merkle = "1.1.0"
