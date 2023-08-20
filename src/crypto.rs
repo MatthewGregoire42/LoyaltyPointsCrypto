@@ -36,7 +36,7 @@ fn elgamal_keygen() -> ([u8; 32], [u8; 32]) {
 //      pk: a compressed RistrettoPoint
 //      m:  a message to encrypt (number of loyalty points)
 // Returns a compressed version of a tuple (RistrettoPoint, RistrettoPoint, Scalar)
-fn elgamal_enc(pk: [u8; 32], m: i32) -> ([u8; 32], [u8; 32], [u8; 32]) {
+pub(crate) fn elgamal_enc(pk: [u8; 32], m: i32) -> ([u8; 32], [u8; 32], [u8; 32]) {
     let pk = puzip(pk);
     let y: Scalar = Scalar::random(&mut OsRng);
 
