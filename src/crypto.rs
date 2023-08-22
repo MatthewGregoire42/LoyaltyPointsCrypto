@@ -94,6 +94,7 @@ struct TxCiphertextData {
     ciphertext: (RistrettoPoint, RistrettoPoint),
     y: Scalar,
     m: Scalar,
+    public_h: RistrettoPoint
 }
 
 #[derive(Clone)]
