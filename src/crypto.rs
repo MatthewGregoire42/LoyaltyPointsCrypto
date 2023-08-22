@@ -60,7 +60,7 @@ pub(crate) fn elgamal_enc(pk: [u8; 32], m: i32) -> ([u8; 32], [u8; 32], [u8; 32]
 //      sk: a compressed Scala
 //      ct:  a compressed (RistrettoPoint, RistrettoPoint) ciphertext
 // Returns the decrypted number of loyalty points
-fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
+pub(crate) fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
     let sk = suzip(sk);
     let ct0 = puzip(ct.0);
     let ct1 = puzip(ct.1);
@@ -83,14 +83,14 @@ fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
     }
 }
 
-fn add_ciphertexts(ct0: ([u8; 32], [u8; 32]), ct1: ([u8; 32], [u8; 32])) -> ([u8; 32], [u8; 32]) {
+pub(crate) fn add_ciphertexts(ct0: ([u8; 32], [u8; 32]), ct1: ([u8; 32], [u8; 32])) -> ([u8; 32], [u8; 32]) {
     let ct0 = (puzip(ct0.0), puzip(ct0.1));
     let ct1 = (puzip(ct1.0), puzip(ct1.1));
 
     (pzip(ct0.0 + ct1.0), pzip(ct0.1 + ct1.1))
 }
 
-struct TxCiphertextData {
+pub(crate) struct TxCiphertextData {
     ciphertext: (RistrettoPoint, RistrettoPoint),
     y: Scalar,
     m: Scalar,
@@ -98,7 +98,7 @@ struct TxCiphertextData {
 }
 
 #[derive(Clone)]
-struct CompressedTxCiphertextData {
+pub(crate) struct CompressedTxCiphertextData {
     ciphertext: ([u8; 32], [u8; 32]),
     y: [u8; 32],
     m: [u8; 32],
@@ -106,7 +106,7 @@ struct CompressedTxCiphertextData {
 }
 
 impl CompressedTxCiphertextData {
-    fn new(ct: ([u8; 32], [u8; 32]), y: [u8; 32], m: i32, h: [u8; 32]) -> Self {
+    pub(crate) fn new(ct: ([u8; 32], [u8; 32]), y: [u8; 32], m: i32, h: [u8; 32]) -> Self {
         CompressedTxCiphertextData {
             ciphertext: ct,
             y: y,
@@ -116,7 +116,7 @@ impl CompressedTxCiphertextData {
     }
 }
 
-fn int_to_scalar(m: i32) -> Scalar {
+pub(crate) fn int_to_scalar(m: i32) -> Scalar {
     let m_pos: u32 = m.abs() as u32;
     let m_scalar = if m == m_pos as i32 { Scalar::from(m_pos) }
                    else { Scalar::zero() - Scalar::from(m_pos) };
@@ -136,7 +136,7 @@ fn int_to_scalar(m: i32) -> Scalar {
 // }
 
 impl CompressedTxCiphertextData {
-    fn decompress(&self) -> TxCiphertextData {
+    pub(crate) fn decompress(&self) -> TxCiphertextData {
         TxCiphertextData {
             ciphertext: (puzip(self.ciphertext.0),
                          puzip(self.ciphertext.1)),
@@ -148,7 +148,7 @@ impl CompressedTxCiphertextData {
 }
 
 #[derive(Clone)]
-struct CompressedCtEqProof {
+pub(crate) struct CompressedCtEqProof {
     shopper_ct: ([u8; 32], [u8; 32]),
     barcode_ct: ([u8; 32], [u8; 32]),
     hs: [u8; 32],
@@ -164,7 +164,7 @@ struct CompressedCtEqProof {
     yb_z: [u8; 32],
 }
 
-fn zk_ct_eq_prove(shopper_tx: CompressedTxCiphertextData, barcode_tx: CompressedTxCiphertextData)
+pub(crate) fn zk_ct_eq_prove(shopper_tx: CompressedTxCiphertextData, barcode_tx: CompressedTxCiphertextData)
                  -> CompressedCtEqProof {
     
     let shopper_tx: TxCiphertextData = shopper_tx.decompress();
@@ -225,7 +225,7 @@ fn zk_ct_eq_prove(shopper_tx: CompressedTxCiphertextData, barcode_tx: Compressed
     }
 }
 
-fn zk_ct_eq_verify(pi: CompressedCtEqProof) -> bool {
+pub(crate) fn zk_ct_eq_verify(pi: CompressedCtEqProof) -> bool {
     // Recompute c
     let mut hasher = Sha512::default();
     for elt in [pi.shopper_ct.0, pi.shopper_ct.1, pi.barcode_ct.0, pi.barcode_ct.1,
@@ -262,7 +262,7 @@ fn zk_ct_eq_verify(pi: CompressedCtEqProof) -> bool {
 #[derive(Clone)]
 // TODO: factor pt, ct, and h out of this proof. Should be provided separately.
 // (Same goes for the other proof and values the server already knows)
-struct CompressedCtDecProof {
+pub(crate) struct CompressedCtDecProof {
     ct: ([u8; 32], [u8; 32]),
     pt: [u8; 32],
     h: [u8; 32],
@@ -271,7 +271,7 @@ struct CompressedCtDecProof {
     x_z: [u8; 32],
 }
 
-fn zk_ct_dec_prove(ct: ([u8; 32], [u8; 32]), pt: i32, x: [u8; 32], h: [u8; 32]) -> CompressedCtDecProof {
+pub(crate) fn zk_ct_dec_prove(ct: ([u8; 32], [u8; 32]), pt: i32, x: [u8; 32], h: [u8; 32]) -> CompressedCtDecProof {
     let c0 = puzip(ct.0);
     let c1 = puzip(ct.1);
     let pt = int_to_scalar(pt);
@@ -310,7 +310,7 @@ fn zk_ct_dec_prove(ct: ([u8; 32], [u8; 32]), pt: i32, x: [u8; 32], h: [u8; 32]) 
     }
 }
 
-fn zk_ct_dec_verify(pi: CompressedCtDecProof) -> bool {
+pub(crate) fn zk_ct_dec_verify(pi: CompressedCtDecProof) -> bool {
     // Recompute c
     let mut hasher = Sha512::default();
     for elt in [pi.ct.0, pi.ct.1, pi.v_t, pi.w_t].iter() {
