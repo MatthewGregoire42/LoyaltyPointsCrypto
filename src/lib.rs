@@ -134,9 +134,11 @@ impl Server {
 
     // Step 3 of a transaction request
     fn process_tx(&mut self, shopper: u32, cts: Ciphertext, ctb: Ciphertext, pi: crypto::CompressedCtEqProof, tx_id: Com) {
-        let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+        // let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         assert!(crypto::zk_ct_eq_verify(pi));
+
+        self.tmp.remove(&tx_id);
     }
 
     // fn settle_balance_hello
@@ -151,25 +153,127 @@ impl Server {
 }
 
 struct Client {
-    handle_points: bool,
-    barcode: u32,
+    barcode: u64,
     num_users: u32,
-    merkle_root: Option<bool>,
-    tmp: u8 // TODO: add what tmp needs to store
+    merkle_root: Option<<algorithms::Sha256 as rs_merkle::Hasher>::Hash>,
+    tmp: HashMap<Com, ClientTxTmp>,
+    sk_enc: Key,
+    pk_enc: Key
+}
+
+struct ClientTxTmp {
+    i_c: Option<u32>,
+    r: Option<[u8; 32]>,
+    uid_b: Option<u32>,
+
 }
 
 impl Client {
-    // fn new
+    fn new(barcode: u64) -> Self {
+        let keys = crypto::elgamal_keygen();
+        Client {
+            barcode: barcode,
+            num_users: 1,
+            merkle_root: None,
+            tmp: HashMap::new(),
+            sk_enc: keys.0,
+            pk_enc: keys.1
+        }
+    }
 
-    // fn register_with_server
+    fn register_with_server(&self) -> (u64, Key) {
+        (self.barcode, self.pk_enc)
+    }
 
-    // fn update_state
+    fn update_state(&mut self, num_users: u32, merkle_root: <algorithms::Sha256 as Hasher>::Hash) {
+        self.num_users = num_users;
+        self.merkle_root = Some(merkle_root);
+    }
 
-    // fn process_tx_hello
+    // Step 1 of a transaction request
 
-    // fn process_tx_compute_id
+    // Input: N/A
+    // Output: commitment to a randomly chosen user ID
+    fn process_tx_hello(&mut self) -> Com {
+        // Commit to a random index and send it to the server
+        let i_c = rand::thread_rng().gen_range(0..self.num_users);
+        let r = rand::thread_rng().gen::<[u8; 32]>();
+        let mut hasher = Sha256::new();
+        hasher.update(i_c.to_le_bytes());
+        hasher.update(r);
+        let com: [u8; 32] = hasher.finalize().into();
 
-    // fn process_tx
+        let tx_id = com;
+        self.tmp.insert(
+            tx_id,
+            ClientTxTmp {
+                i_c: Some(i_c),
+                r: Some(r),
+                uid_b: None,
+            }
+        );
 
-    // fn settle_balance
+        com
+    }
+
+    // Step 2 of a transaction request
+
+    // Input: server's randomly chosen barcode UID
+    // Output: opened commitment to client-chosed barcode UID
+    fn process_tx_compute_id(&mut self, i_s: u32, tx_id: Com) -> (u32, [u8; 32]) {
+        let mut tmp: &mut ClientTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+
+        let i = (tmp.i_c.unwrap() + i_s) % self.num_users;
+        tmp.uid_b = Some(i);
+
+        (tmp.i_c.unwrap(), tmp.r.unwrap())
+    }
+
+    fn verify_merkle_proof(&mut self, barcode: u64, pi: MerkleProof<algorithms::Sha256>, pkb: Key, tx_id: Com) -> bool {
+        let tmp: &ClientTxTmp = self.tmp.get(&tx_id).unwrap();
+
+        let leaf = TreeEntry {
+            uid: tmp.uid_b.unwrap(),
+            barcode: barcode,
+            pk_enc: pkb
+        };
+        let tree_contents = algorithms::Sha256::hash(leaf.to_bytes().as_slice());
+
+        let test = pi.verify(self.merkle_root.unwrap(), &[tmp.uid_b.unwrap().try_into().unwrap()], &[tree_contents], 1);
+
+        assert!(test);
+
+        test
+    }
+
+    // Step 3 of a transaction request
+    fn process_tx(&mut self, pi: MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Key, tx_id: Com) -> (Ciphertext, Ciphertext, crypto::CompressedCtEqProof) {
+        // Verify Merkle proof that the agreed upon index is in the tree
+        self.verify_merkle_proof(barcode, pi, pkb, tx_id);
+
+        // Encrypt the number of points under both public keys
+        let cts = crypto::elgamal_enc(self.pk_enc, -1*points);
+        let cts_data = crypto::CompressedTxCiphertextData::new(
+            (cts.0, cts.1), cts.2, -1*points, self.pk_enc
+        );
+
+        let ctb = crypto::elgamal_enc(pkb, points);
+        let ctb_data = crypto::CompressedTxCiphertextData::new(
+            (ctb.0, ctb.1), ctb.2, points, pkb
+        );
+
+        // Generate a zero knowledge proof that these encrypt the same value
+        let pi = crypto::zk_ct_eq_prove(cts_data, ctb_data);
+
+        self.tmp.remove(&tx_id);
+
+        ((cts.0, cts.1), (ctb.0, ctb.1), pi)
+    }
+
+    fn settle_balance(&self, ct: Ciphertext) -> (i32, crypto::CompressedCtDecProof) {
+        let plaintext = crypto::elgamal_dec(self.sk_enc, ct);
+        let pi = crypto::zk_ct_dec_prove(ct, plaintext, self.sk_enc, self.pk_enc);
+
+        (plaintext, pi)
+    }
 }

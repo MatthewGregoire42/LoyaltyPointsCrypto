@@ -26,7 +26,7 @@ fn suzip(s: [u8; 32]) -> Scalar {
 }
 
 // Returns a compressed version of a tuple (Scalar, RistrettoPoint)
-fn elgamal_keygen() -> ([u8; 32], [u8; 32]) {
+pub(crate) fn elgamal_keygen() -> ([u8; 32], [u8; 32]) {
     let x: Scalar = Scalar::random(&mut OsRng);
     let h: RistrettoPoint = &x * G;
     (szip(x), pzip(h))
