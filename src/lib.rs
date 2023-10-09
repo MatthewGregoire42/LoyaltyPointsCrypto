@@ -7,8 +7,11 @@ use rand::Rng;
 use sha2::{Sha256, Digest};
 
 type Com = [u8; 32];
-type Ciphertext = ([u8; 32], [u8; 32]);
-type Key = [u8; 32];
+type Receipt = ();
+
+type CPoint = [u8; 32];
+type CScalar = [u8; 32];
+type Ciphertext = (CPoint, CPoint);
 
 struct Server {
     num_users: u32, 
@@ -27,7 +30,7 @@ struct ServerTxTmp {
 struct UserRecord {
     barcode: u64,
     balance: Ciphertext,
-    pk_enc: Key
+    pk_enc: CPoint
 }
 
 // User data stored in the server's Merkle tree
@@ -35,7 +38,7 @@ struct UserRecord {
 struct TreeEntry {
     uid: u32,
     barcode: u64,
-    pk_enc: Key
+    pk_enc: CPoint
 }
 
 impl TreeEntry {
@@ -54,7 +57,7 @@ impl Server {
         }
     }
 
-    fn register_user(&mut self, barcode: u64, pk_enc: Key) {
+    fn register_user(&mut self, barcode: u64, pk_enc: CPoint) {
         let ct = &crypto::elgamal_enc(pk_enc, 0);
         let init_balance = (ct.0, ct.1);
 
@@ -108,14 +111,14 @@ impl Server {
 
     // Input: shopper UID, opened commitment contents: client-chosen random ID and mask
     // Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
-    fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Key, MerkleProof<algorithms::Sha256>) {
+    fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, CPoint, MerkleProof<algorithms::Sha256>) {
         let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         // Recompute commitment and check that it matches.
         let mut hasher = Sha256::new();
         hasher.update(i_c.to_le_bytes());
         hasher.update(r);
-        let com_test: [u8; 32] = hasher.finalize().into();
+        let com_test: Com = hasher.finalize().into();
 
         assert!(com_test == tx_id, "Invalid commit");
 
@@ -157,8 +160,8 @@ struct Client {
     num_users: u32,
     merkle_root: Option<<algorithms::Sha256 as rs_merkle::Hasher>::Hash>,
     tmp: HashMap<Com, ClientTxTmp>,
-    sk_enc: Key,
-    pk_enc: Key
+    sk_enc: CScalar,
+    pk_enc: CPoint
 }
 
 struct ClientTxTmp {
@@ -181,7 +184,7 @@ impl Client {
         }
     }
 
-    fn register_with_server(&self) -> (u64, Key) {
+    fn register_with_server(&self) -> (u64, CPoint) {
         (self.barcode, self.pk_enc)
     }
 
@@ -201,7 +204,7 @@ impl Client {
         let mut hasher = Sha256::new();
         hasher.update(i_c.to_le_bytes());
         hasher.update(r);
-        let com: [u8; 32] = hasher.finalize().into();
+        let com: Com = hasher.finalize().into();
 
         let tx_id = com;
         self.tmp.insert(
@@ -229,7 +232,7 @@ impl Client {
         (tmp.i_c.unwrap(), tmp.r.unwrap())
     }
 
-    fn verify_merkle_proof(&mut self, barcode: u64, pi: MerkleProof<algorithms::Sha256>, pkb: Key, tx_id: Com) -> bool {
+    fn verify_merkle_proof(&mut self, barcode: u64, pi: MerkleProof<algorithms::Sha256>, pkb: CPoint, tx_id: Com) -> bool {
         let tmp: &ClientTxTmp = self.tmp.get(&tx_id).unwrap();
 
         let leaf = TreeEntry {
@@ -247,7 +250,7 @@ impl Client {
     }
 
     // Step 3 of a transaction request
-    fn process_tx(&mut self, pi: MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Key, tx_id: Com) -> (Ciphertext, Ciphertext, crypto::CompressedCtEqProof) {
+    fn process_tx(&mut self, pi: MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: CPoint, tx_id: Com) -> (Ciphertext, Ciphertext, crypto::CompressedCtEqProof) {
         // Verify Merkle proof that the agreed upon index is in the tree
         self.verify_merkle_proof(barcode, pi, pkb, tx_id);
 

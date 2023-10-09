@@ -9,24 +9,28 @@ use curve25519_dalek::digest::Update;
 
 const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
 
-fn pzip(p: RistrettoPoint) -> [u8; 32] {
+type CPoint = [u8; 32];
+type CScalar = [u8; 32];
+type Ciphertext = (CPoint, CPoint);
+
+fn pzip(p: RistrettoPoint) -> CPoint {
     p.compress().to_bytes()
 }
 
-fn puzip(p: [u8; 32]) -> RistrettoPoint {
+fn puzip(p: CPoint) -> RistrettoPoint {
     CompressedRistretto::from_slice(&p).decompress().unwrap()
 }
 
-fn szip(s: Scalar) -> [u8; 32] {
+fn szip(s: Scalar) -> CScalar {
     s.to_bytes()
 }
 
-fn suzip(s: [u8; 32]) -> Scalar {
+fn suzip(s: CScalar) -> Scalar {
     Scalar::from_bytes_mod_order(s)
 }
 
 // Returns a compressed version of a tuple (Scalar, RistrettoPoint)
-pub(crate) fn elgamal_keygen() -> ([u8; 32], [u8; 32]) {
+pub(crate) fn elgamal_keygen() -> (CScalar, CPoint) {
     let x: Scalar = Scalar::random(&mut OsRng);
     let h: RistrettoPoint = &x * G;
     (szip(x), pzip(h))
@@ -34,9 +38,9 @@ pub(crate) fn elgamal_keygen() -> ([u8; 32], [u8; 32]) {
 
 // Takes as parameters:
 //      pk: a compressed RistrettoPoint
-//      m:  a message to encrypt (number of loyalty points)
+//      m:  a message to encrypt (random mask chosen by client)
 // Returns a compressed version of a tuple (RistrettoPoint, RistrettoPoint, Scalar)
-pub(crate) fn elgamal_enc(pk: [u8; 32], m: i32) -> ([u8; 32], [u8; 32], [u8; 32]) {
+pub(crate) fn elgamal_enc(pk: CPoint, m: i32) -> (CPoint, CPoint, CScalar) {
     let pk = puzip(pk);
     let y: Scalar = Scalar::random(&mut OsRng);
 
@@ -57,10 +61,10 @@ pub(crate) fn elgamal_enc(pk: [u8; 32], m: i32) -> ([u8; 32], [u8; 32], [u8; 32]
 }
 
 // Takes as parameters:
-//      sk: a compressed Scala
+//      sk: a compressed Scalar
 //      ct:  a compressed (RistrettoPoint, RistrettoPoint) ciphertext
-// Returns the decrypted number of loyalty points
-pub(crate) fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
+// Returns the decrypted chosen mask
+pub(crate) fn elgamal_dec(sk: CScalar, ct: Ciphertext) -> i32 {
     let sk = suzip(sk);
     let ct0 = puzip(ct.0);
     let ct1 = puzip(ct.1);
@@ -69,6 +73,7 @@ pub(crate) fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
     // The result of ElGamal decryption (mg) is the value m*g. Assuming m is a small scalar,
     // we can extract it by guessing and checking different values until we find an m
     // such that mg = m*g.
+    // TODO: implement baby-step giant-step
     let mut m: u32 = 0;
     loop {
         if &Scalar::from(m) * G == mg {
@@ -83,7 +88,7 @@ pub(crate) fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
     }
 }
 
-pub(crate) fn add_ciphertexts(ct0: ([u8; 32], [u8; 32]), ct1: ([u8; 32], [u8; 32])) -> ([u8; 32], [u8; 32]) {
+pub(crate) fn add_ciphertexts(ct0: Ciphertext, ct1: Ciphertext) -> Ciphertext {
     let ct0 = (puzip(ct0.0), puzip(ct0.1));
     let ct1 = (puzip(ct1.0), puzip(ct1.1));
 
@@ -99,14 +104,14 @@ pub(crate) struct TxCiphertextData {
 
 #[derive(Clone)]
 pub(crate) struct CompressedTxCiphertextData {
-    ciphertext: ([u8; 32], [u8; 32]),
-    y: [u8; 32],
-    m: [u8; 32],
-    public_h: [u8; 32],
+    ciphertext: Ciphertext,
+    y: CScalar,
+    m: CScalar,
+    public_h: CPoint,
 }
 
 impl CompressedTxCiphertextData {
-    pub(crate) fn new(ct: ([u8; 32], [u8; 32]), y: [u8; 32], m: i32, h: [u8; 32]) -> Self {
+    pub(crate) fn new(ct: Ciphertext, y: CScalar, m: i32, h: CPoint) -> Self {
         CompressedTxCiphertextData {
             ciphertext: ct,
             y: y,
@@ -149,19 +154,19 @@ impl CompressedTxCiphertextData {
 
 #[derive(Clone)]
 pub(crate) struct CompressedCtEqProof {
-    shopper_ct: ([u8; 32], [u8; 32]),
-    barcode_ct: ([u8; 32], [u8; 32]),
-    hs: [u8; 32],
-    hb: [u8; 32],
-    cs0_t: [u8; 32],
-    cs1_t: [u8; 32],
-    cb0_t: [u8; 32],
-    cb1_t: [u8; 32],
-    i_t: [u8; 32],
-    m_z: [u8; 32],
-    mp_z: [u8; 32],
-    ys_z: [u8; 32],
-    yb_z: [u8; 32],
+    shopper_ct: Ciphertext,
+    barcode_ct: Ciphertext,
+    hs: CPoint,
+    hb: CPoint,
+    cs0_t: CPoint,
+    cs1_t: CPoint,
+    cb0_t: CPoint,
+    cb1_t: CPoint,
+    i_t: CPoint,
+    m_z: CScalar,
+    mp_z: CScalar,
+    ys_z: CScalar,
+    yb_z: CScalar,
 }
 
 pub(crate) fn zk_ct_eq_prove(shopper_tx: CompressedTxCiphertextData, barcode_tx: CompressedTxCiphertextData)
@@ -196,7 +201,7 @@ pub(crate) fn zk_ct_eq_prove(shopper_tx: CompressedTxCiphertextData, barcode_tx:
     // Challenge
     let mut hasher = Sha512::default();
     for elt in [cs0, cs1, cb0, cb1, cs0_t, cs1_t, cb0_t, cb1_t, i_t].iter() {
-        let elt_bytes: [u8; 32] = pzip(*elt);
+        let elt_bytes: CPoint = pzip(*elt);
         hasher.update(&elt_bytes);
     }
     
@@ -263,15 +268,15 @@ pub(crate) fn zk_ct_eq_verify(pi: CompressedCtEqProof) -> bool {
 // TODO: factor pt, ct, and h out of this proof. Should be provided separately.
 // (Same goes for the other proof and values the server already knows)
 pub(crate) struct CompressedCtDecProof {
-    ct: ([u8; 32], [u8; 32]),
-    pt: [u8; 32],
-    h: [u8; 32],
-    v_t: [u8; 32],
-    w_t: [u8; 32],
-    x_z: [u8; 32],
+    ct: Ciphertext,
+    pt: CScalar,
+    h: CPoint,
+    v_t: CPoint,
+    w_t: CPoint,
+    x_z: CScalar,
 }
 
-pub(crate) fn zk_ct_dec_prove(ct: ([u8; 32], [u8; 32]), pt: i32, x: [u8; 32], h: [u8; 32]) -> CompressedCtDecProof {
+pub(crate) fn zk_ct_dec_prove(ct: Ciphertext, pt: i32, x: CScalar, h: CPoint) -> CompressedCtDecProof {
     let c0 = puzip(ct.0);
     let c1 = puzip(ct.1);
     let pt = int_to_scalar(pt);
@@ -291,7 +296,7 @@ pub(crate) fn zk_ct_dec_prove(ct: ([u8; 32], [u8; 32]), pt: i32, x: [u8; 32], h:
     // Challenge
     let mut hasher = Sha512::default();
     for elt in [c0, c1, v_t, w_t].iter() {
-        let elt_bytes: [u8; 32] = pzip(*elt);
+        let elt_bytes: CPoint = pzip(*elt);
         hasher.update(&elt_bytes);
     }
     
