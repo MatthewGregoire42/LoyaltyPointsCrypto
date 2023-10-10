@@ -153,6 +153,36 @@ impl CompressedTxCiphertextData {
 }
 
 #[derive(Clone)]
+pub(crate) struct CompressedTxProof {
+    r1: CPoint,
+    r2: CPoint,
+    r3: CPoint,
+    r4: CPoint,
+    v: CPoint,
+    e: CPoint,
+    vx: CPoint,
+    ex: CPoint,
+
+    r1_t: CPoint,
+    r2_t: CPoint,
+    r3_t: CPoint,
+    r4_t: CPoint,
+    v_t: CPoint,
+    e_t: CPoint,
+    vx_t: CPoint,
+    ex_t: CPoint,
+
+    r_z: CScalar,
+    m_z: CScalar,
+    x_z: CScalar,
+    a_z: CScalar,
+    y_z: CScalar,
+    t_z: CScalar
+}
+
+pub(crate) fn zk_tx_prove() {}
+
+#[derive(Clone)]
 pub(crate) struct CompressedCtEqProof {
     shopper_ct: Ciphertext,
     barcode_ct: Ciphertext,
