@@ -1,29 +1,35 @@
 use rand_core::OsRng;
+use rand::rngs;
+use std::collections::HashMap;
 use curve25519_dalek::constants;
-use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::ristretto::RistrettoBasepointTable;
 use curve25519_dalek::scalar::Scalar;
 use sha2::Sha512;
 use curve25519_dalek::digest::Update;
-use ed25519::signature::{Signer, Verifier};
-use ed25519_dalek::{Signer, Verifier, Signature};
+use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
 
 const MAX_POINTS: i32 = 1000000;
 
 const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
-const H: &RistrettoBasepointTable = &RistrettoBasepointTable::create(&RistrettoPoint::random(&mut OsRng));
-const U: &RistrettoBasepointTable = &RistrettoBasepointTable::create(&RistrettoPoint::random(&mut OsRng));
 
 type Point = RistrettoPoint;
 type Ciphertext = (Point, Point);
 
+fn h_point() -> Point {
+    RistrettoPoint::hash_from_bytes::<Sha512>("base h".as_bytes())
+}
+
+fn u_point() -> Point {
+    RistrettoPoint::hash_from_bytes::<Sha512>("base u".as_bytes())
+}
+
 fn pzip(p: Point) -> [u8; 32] {
-    p.compress()
+    p.compress().to_bytes()
 }
 
 fn szip(s: Scalar) -> [u8; 32] {
-    p.to_bytes()
+    s.to_bytes()
 }
 
 pub(crate) fn elgamal_keygen() -> (Scalar, Point) {
@@ -81,25 +87,33 @@ pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> i32 {
 // number of loyalty points, so we limit our search space to (-max points, max points).
 pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
     // create lookup table for small powers of the base.
-    let mut table = HashMap;:new();
+    let mut table = HashMap::new();
 
-    m = f32::sqrt(2*MAX_POINTS) as i32 + 1;
+    let m = ((2*MAX_POINTS) as f32).sqrt() as i32 + 1;
     for i in 0..m {
-        table.insert(&int_to_scalar(i)*g, i)
+        let k = pzip(&int_to_scalar(i)*g);
+        table.insert(k, i);
     }
 
+    let mut res: Option<i32> = None;
     let g_inv = &int_to_scalar(-1*m)*g;
     let mut gamma = gx;
     for i in 0..m {
-        if (table.contains_key(gamma)) {
-            break i*m + table[gamma];
+        let k = pzip(gamma);
+        if table.contains_key(&k) {
+            res = Some(i*m + table[&k]);
+            break;
         }
         gamma = gamma + g_inv;
     }
-    panic!("Number of points out of bounds");
+
+    match res {
+        Some(x) => x,
+        None => panic!("Number of points out of bounds")
+    }
 }
 
-pub(crate) fn add_ciphertexts(ct0: Ciphertext, ct1: Ciphertext) -> i32 {
+pub(crate) fn add_ciphertexts(ct0: Ciphertext, ct1: Ciphertext) -> Ciphertext {
     ((ct0.0 + ct1.0), (ct0.1 + ct1.1))
 }
 
@@ -154,15 +168,16 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     let r2 = masked_m;
     let r3 = masked_x;
     let a = m*x;
+    let u = u_point();
     
     // Setup temporary variables for nonlinear proof.
     // Need to share: v, e, vx, ex
     let y = Scalar::random(&mut OsRng);
     let t = Scalar::random(&mut OsRng);
     let v  = &y*G;
-    let e  = &y*U + &m*G;
+    let e  = &y*u + &m*G;
     let vx = &t*G;
-    let ex = &t*U + &a*G;
+    let ex = &t*u + &a*G;
 
     // Commitment
     let m_t = Scalar::random(&mut OsRng);
@@ -170,12 +185,12 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     let y_t = Scalar::random(&mut OsRng);
     let t_t = Scalar::random(&mut OsRng);
 
-    let r2_t = &m_t*H;
+    let r2_t = &m_t*h_point();
     let r3_t = &a_t*G;
     let v_t = &y_t*G;
-    let e_t = &y_t*U + &m_t*G;
+    let e_t = &y_t*u + &m_t*G;
     let vx_t = &t_t*G;
-    let ex_t = &t_t*U + &a_t*G;
+    let ex_t = &t_t*u + &a_t*G;
 
     // Challenge
     let mut hasher = Sha512::default();
@@ -192,7 +207,7 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     let y_z = y_t + y*c;
     let t_z = t_t + t*c;
 
-    CompressedTxAndProof {
+    TxAndProof {
         r2: r2,
         r3: r3,
         v: v,
@@ -215,6 +230,8 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
 }
 
 pub(crate) fn zk_tx_verify(pi: TxAndProof) -> bool {
+    let u = u_point();
+
     // Recompute c
     let mut hasher = Sha512::default();
     for elt in [pi.r2, pi.r3, pi.v, pi.e, pi.vx, pi.ex,
@@ -224,12 +241,12 @@ pub(crate) fn zk_tx_verify(pi: TxAndProof) -> bool {
     }
     let c = Scalar::from_hash(hasher);
 
-    let check1 = &pi.m_z * H == pi.r2_t + &c * pi.r2;
+    let check1 = &pi.m_z * h_point() == pi.r2_t + &c * pi.r2;
     let check2 = &pi.a_z * G == pi.r3_t + &c * pi.r3;
     let check3 = &pi.y_z * G == pi.v_t + &c * pi.v;
-    let check4 = &pi.y_z * U + &pi.m_z * G == pi.e_t + &c * pi.e;
+    let check4 = &pi.y_z * u + &pi.m_z * G == pi.e_t + &c * pi.e;
     let check5 = &pi.t_z * G == pi.vx_t + &c * pi.vx;
-    let check6 = &pi.t_z * U + &pi.a_z * G == pi.ex_t + &c * pi.ex;
+    let check6 = &pi.t_z * u + &pi.a_z * G == pi.ex_t + &c * pi.ex;
 
     check1 && check2 && check3 && check4 && check5 && check6
 }
@@ -265,8 +282,10 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: Vec::<Point>,
     // Decompress
     let n = xs.len();                        // Number of transactions
     let b1 = &int_to_scalar(x) * G;          // Algebraic balance representation
-    let b2 = bal                             // Masked balance
+    let b2 = bal;                            // Masked balance
     let xs = Vec::<Scalar>::with_capacity(n);
+    let h = h_point();
+    let u = u_point();
 
     // Auxilliary scalars for nonlinear proofs
     let mut aas = Vec::<Scalar>::with_capacity(n);  // 'as' is a Rust keyword
@@ -309,11 +328,11 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: Vec::<Point>,
         y_ts.push(Scalar::random(&mut OsRng));
         t_ts.push(Scalar::random(&mut OsRng));
 
-        b_mts.push(&m_ts[i]*H);
+        b_mts.push(&m_ts[i]*h);
         v_ts.push(&y_ts[i]*G);
-        e_ts.push(&y_ts[i]*U + &m_ts[i]*G);
+        e_ts.push(&y_ts[i]*u + (&m_ts[i]*G));
         vx_ts.push(&t_ts[i]*G);
-        ex_ts.push(&t_ts[i]*U + &a_ts[i]*G);
+        ex_ts.push(&t_ts[i]*u + (&a_ts[i]*G));
     }
 
     // Challenge
@@ -344,7 +363,7 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: Vec::<Point>,
         t_zs.push(t_ts[i] + ts[i]*c);
     }
 
-    CompressedSettleProof {
+    SettleProof {
         vs: vs,
         es: es,
         vxs: vxs,
@@ -370,6 +389,7 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
     let n = b_ms.len();
     let b1 = &int_to_scalar(x)*G;
     let b2 = bal;
+    let u = u_point();
 
     // Recompute c
     let mut hasher = Sha512::default();
@@ -377,7 +397,7 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
     hasher.update(&pzip(b1));
     hasher.update(&pzip(b2));
     for i in 0..n {
-        for elt in [pi.b_ms[i], pi.v_ts[i], pi.e_ts[i], pi.vx_ts[i], pi.ex_ts[i]].iter() {
+        for elt in [b_ms[i], pi.v_ts[i], pi.e_ts[i], pi.vx_ts[i], pi.ex_ts[i]].iter() {
             let elt_bytes: [u8; 32] = pzip(*elt);
             hasher.update(&elt_bytes);
         }
@@ -385,102 +405,59 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
     
     let c = Scalar::from_hash(hasher);
 
-    let az_sum = Scalar::zero();
-    let xz_sum = Scalar::zero();
+    let mut az_sum = Scalar::zero();
+    let mut xz_sum = Scalar::zero();
     for i in 0..n {
         az_sum = az_sum + pi.a_zs[i];
         xz_sum = xz_sum + pi.x_zs[i];
     }
 
-    let check_b1 = &xz_sum * G == pi.b1_t + &c * b1;
-    let check_b2 = &az_sum * G == pi.b2_t + &c * b2;
+    let check_b1 = &xz_sum * G == pi.b1_t + (&c * b1);
+    let check_b2 = &az_sum * G == pi.b2_t + (&c * b2);
 
-    let result = check_b1 && check_b2;
-
-    let check = true;
+    let mut result = check_b1 && check_b2;
     for i in 0..n {
-        b_m = pi.b_ms[i];
-        v = pi.vs[i];
-        e = pi.es[i];
-        vx = pi.vxs[i];
-        ex = pi.exs[i];
+        let b_m = b_ms[i];
+        let v = pi.vs[i];
+        let e = pi.es[i];
+        let vx = pi.vxs[i];
+        let ex = pi.exs[i];
 
-        b_mt = pi.b_mts[i];
-        v_t = pi.v_ts[i];
-        e_t = pi.e_ts[i];
-        vx_t = pi.vx_ts[i];
-        ex_t = pi.ex_ts[i];
+        let b_mt = pi.b_mts[i];
+        let v_t = pi.v_ts[i];
+        let e_t = pi.e_ts[i];
+        let vx_t = pi.vx_ts[i];
+        let ex_t = pi.ex_ts[i];
 
-        m_z = pi.m_zs[i];
-        x_z = pi.x_zs[i];
-        a_z = pi.a_zs[i];
-        y_z = pi.y_zs[i];
-        t_z = pi.t_zs[i];
+        let m_z = pi.m_zs[i];
+        let a_z = pi.a_zs[i];
+        let y_z = pi.y_zs[i];
+        let t_z = pi.t_zs[i];
 
-        check1 = &m_z*H == b_mt + &c*b_m;
-        check2 = &y_z*G == v_t + &c*v;
-        check3 = &y_z*U + &m_z*G == e_t + &c*e;
-        check4 = &t_z*G == vx_t + &c*vx;
-        check5 = &t_z*U + &a_z*G == ex_t + &c*ex;
+        let check1 = &m_z*h_point() == b_mt + (&c*b_m);
+        let check2 = &y_z*G == v_t + (&c*v);
+        let check3 = &y_z*u + &m_z*G == e_t + (&c*e);
+        let check4 = &t_z*G == vx_t + (&c*vx);
+        let check5 = &t_z*u + &a_z*G == ex_t + (&c*ex);
 
         result = result && check1 && check2 && check3 && check4 && check5;
-        if (!result) {
+        if !result {
             break
         }
     }
     result
 }
 
-// Code for signatures adapted from the following documentation:
-// https://docs.rs/ed25519/latest/ed25519/
-pub struct Signer<S>
-where
-    S: Signer<ed25519::Signature>
-{
-    pub signing_key: S
-}
-
-impl<S> Signer<S>
-where
-    S: Signer<ed25519::Signature>
-{
-    pub fn sign(&self, p: Point) -> ed25519::Signature {
-        self.signing_key.sign(pzip(p));
-    }
-}
-
-pub struct Verifier<V> {
-    pub verifying_key: V
-}
-
-impl<V> Verifier<V>
-where
-    V: Verifier<ed25519::Signature>
-{
-    pub fn verify(
-        &self,
-        p: Point,
-        signature: &ed25519::Signature
-    ) -> Result<(), ed25519::Error> {
-        self.verifying_key.verify(pzip(p), signature)
-    }
-}
-
-pub type DalekSigner = Signer<ed25519_dalek::SigningKey>;
-pub type DalekVerifier = Verifier<ed25519_dalek::VerifyingKey>;
-
-pub(crate) fn signature_keygen() -> (ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
-    let sk = ed25519_dalek::SigningKey::generate(&mut OsRng);
+pub(crate) fn signature_keygen() -> (SigningKey, VerifyingKey) {
+    let sk = SigningKey::generate(&mut rngs::OsRng);
     let vk = sk.verifying_key();
     (sk, vk)
 }
 
-pub(crate) fn sign(sk: ed25519_dalek::SigningKey, p: Point) -> ed25519::Signature {
-    let signer = DalekSigner { sk };
-    signer.sign(p)
+pub(crate) fn sign(sk: SigningKey, p: Point) -> Signature {
+    sk.sign(&pzip(p))
 }
 
-pub(crate) fn verify(vk: ed25519_dalek::VerifyingKey, p: Point, s: ed25519::Signature) -> bool {
-    let verifier = DalekVerifier { vk };
-    verifier.verify(p, &s).is_ok()
+pub(crate) fn verify(vk: VerifyingKey, p: Point, s: Signature) -> bool {
+    vk.verify(&pzip(p), &s).is_ok()
 }

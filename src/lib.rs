@@ -1,4 +1,4 @@
-// mod crypto;
+mod crypto;
 // use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
 // use std::collections::HashMap;
 // use std::vec::Vec;
