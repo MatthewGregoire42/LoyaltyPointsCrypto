@@ -6,6 +6,8 @@ use curve25519_dalek::ristretto::RistrettoBasepointTable;
 use curve25519_dalek::scalar::Scalar;
 use sha2::Sha512;
 use curve25519_dalek::digest::Update;
+use ed25519::signature::{Signer, Verifier};
+use ed25519_dalek::{Signer, Verifier, Signature};
 
 const MAX_POINTS: i32 = 1000000;
 
@@ -427,4 +429,58 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
         }
     }
     result
+}
+
+// Code for signatures adapted from the following documentation:
+// https://docs.rs/ed25519/latest/ed25519/
+pub struct Signer<S>
+where
+    S: Signer<ed25519::Signature>
+{
+    pub signing_key: S
+}
+
+impl<S> Signer<S>
+where
+    S: Signer<ed25519::Signature>
+{
+    pub fn sign(&self, p: Point) -> ed25519::Signature {
+        self.signing_key.sign(pzip(p));
+    }
+}
+
+pub struct Verifier<V> {
+    pub verifying_key: V
+}
+
+impl<V> Verifier<V>
+where
+    V: Verifier<ed25519::Signature>
+{
+    pub fn verify(
+        &self,
+        p: Point,
+        signature: &ed25519::Signature
+    ) -> Result<(), ed25519::Error> {
+        self.verifying_key.verify(pzip(p), signature)
+    }
+}
+
+pub type DalekSigner = Signer<ed25519_dalek::SigningKey>;
+pub type DalekVerifier = Verifier<ed25519_dalek::VerifyingKey>;
+
+pub(crate) fn signature_keygen() -> (ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
+    let sk = ed25519_dalek::SigningKey::generate(&mut OsRng);
+    let vk = sk.verifying_key();
+    (sk, vk)
+}
+
+pub(crate) fn sign(sk: ed25519_dalek::SigningKey, p: Point) -> ed25519::Signature {
+    let signer = DalekSigner { sk };
+    signer.sign(p)
+}
+
+pub(crate) fn verify(vk: ed25519_dalek::VerifyingKey, p: Point, s: ed25519::Signature) -> bool {
+    let verifier = DalekVerifier { vk };
+    verifier.verify(p, &s).is_ok()
 }
