@@ -7,6 +7,8 @@ use curve25519_dalek::scalar::Scalar;
 use sha2::Sha512;
 use curve25519_dalek::digest::Update;
 
+const MAX_POINTS: i32 = 1000000;
+
 const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
 const H: &RistrettoBasepointTable = &RistrettoBasepointTable::create(&RistrettoPoint::random(&mut OsRng));
 const U: &RistrettoBasepointTable = &RistrettoBasepointTable::create(&RistrettoPoint::random(&mut OsRng));
@@ -72,10 +74,30 @@ pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> i32 {
     }
 }
 
-pub(crate) fn add_ciphertexts(ct0: Ciphertext, ct1: Ciphertext) -> Ciphertext {
-    let ct0 = (puzip(ct0.0), puzip(ct0.1));
-    let ct1 = (puzip(ct1.0), puzip(ct1.1));
+// Use the baby-step giant-step algorithm to compute the discrete log between
+// two values (when the discrete log is small). This is only ever used to unmask a
+// number of loyalty points, so we limit our search space to (-max points, max points).
+pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
+    // create lookup table for small powers of the base.
+    let mut table = HashMap;:new();
 
+    m = f32::sqrt(2*MAX_POINTS) as i32 + 1;
+    for i in 0..m {
+        table.insert(&int_to_scalar(i)*g, i)
+    }
+
+    let g_inv = &int_to_scalar(-1*m)*g;
+    let mut gamma = gx;
+    for i in 0..m {
+        if (table.contains_key(gamma)) {
+            break i*m + table[gamma];
+        }
+        gamma = gamma + g_inv;
+    }
+    panic!("Number of points out of bounds");
+}
+
+pub(crate) fn add_ciphertexts(ct0: Ciphertext, ct1: Ciphertext) -> i32 {
     ((ct0.0 + ct1.0), (ct0.1 + ct1.1))
 }
 
