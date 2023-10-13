@@ -5,16 +5,18 @@ mod crypto;
 // use serde_derive::Serialize;
 // use rand::Rng;
 // use sha2::{Sha256, Digest};
+// use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+// use curve25519_dalek::RistrettoPoint;
 
 // type Com = [u8; 32];
 // type Receipt = ();
 
-// type CPoint = [u8; 32];
-// type CScalar = [u8; 32];
-// type Ciphertext = (CPoint, CPoint);
+// type Point = RistrettoPoint;
 
 // struct Server {
-//     num_users: u32, 
+//     num_users: u32,
+//     sk: SigningKey,
+//     vk: VerifyingKey,
 //     users: HashMap<u32, UserRecord>,
 //     merkle_tree: MerkleTree<algorithms::Sha256>,
 //     tmp: HashMap<Com, ServerTxTmp>,
@@ -29,7 +31,7 @@ mod crypto;
 // #[derive(Debug, Serialize, Clone)]
 // struct UserRecord {
 //     barcode: u64,
-//     balance: Ciphertext,
+//     balance: Point,
 //     pk_enc: CPoint
 // }
 

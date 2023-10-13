@@ -5,9 +5,13 @@ use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::ristretto::RistrettoBasepointTable;
 use curve25519_dalek::scalar::Scalar;
-use sha2::Sha512;
+use sha2::{Sha256, Sha512};
 use curve25519_dalek::digest::Update;
 use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
+use aes_gcm::{
+    aead::{Aead, AeadCore, KeyInit},
+    Aes256Gcm, Nonce, Key
+};
 
 const MAX_POINTS: i32 = 1000000;
 
@@ -38,47 +42,88 @@ pub(crate) fn elgamal_keygen() -> (Scalar, Point) {
     (x, h)
 }
 
+pub(crate) fn elgamal_enc(pk: Point, m: Point) -> Ciphertext {
+    let r = Scalar::random(&mut OsRng);
+    let c1 = &r*G;
+    let c2 = &r*pk + m;
+
+    (c1, c2)
+}
+
 // Takes as parameters:
 //      pk: a Point
 //      m:  a message to encrypt (random mask chosen by client)
-pub(crate) fn elgamal_enc(pk: Point, m: i32) -> (Point, Point, Scalar) {
-    let r: Scalar = Scalar::random(&mut OsRng);
+// pub(crate) fn elgamal_enc(pk: Point, m: i32) -> (Point, Point, Scalar) {
+//     let r: Scalar = Scalar::random(&mut OsRng);
 
-    // We need to convert m to a scalar
-    let m_pos: u32 = m.abs() as u32;
-    let m_scalar = if m == m_pos as i32 { Scalar::from(m_pos) }
-                   else { Scalar::zero() - Scalar::from(m_pos) };
+//     // We need to convert m to a scalar
+//     let m_pos: u32 = m.abs() as u32;
+//     let m_scalar = if m == m_pos as i32 { Scalar::from(m_pos) }
+//                    else { Scalar::zero() - Scalar::from(m_pos) };
 
-    let c1 = &r*G;
-    let c2 = &m_scalar*G + r*pk;
+//     let c1 = &r*G;
+//     let c2 = &m_scalar*G + r*pk;
 
-    // y is a secret; it needs to be kept by the client to generate a proof
-    // and then is discarded afterwards.
-    (c1, c2, r)
-}
+//     // y is a secret; it needs to be kept by the client to generate a proof
+//     // and then is discarded afterwards.
+//     (c1, c2, r)
+// }
 
 // Takes as parameters:
 //      sk: a compressed Scalar
 //      ct:  a compressed (Point, Point) ciphertext
 // Returns the decrypted chosen mask
-pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> i32 {
-    let mg = ct.1 + (Scalar::zero() - sk) * ct.0;
+pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> Point {
+    ct.1 + (Scalar::zero() - sk) * ct.0
 
+    // Brute force DL decryption
     // The result of ElGamal decryption (mg) is the value m*g. Assuming m is a small scalar,
     // we can extract it by guessing and checking different values until we find an m
     // such that mg = m*g.
-    // TODO: implement baby-step giant-step
-    let mut m: u32 = 0;
-    loop {
-        if &Scalar::from(m) * G == mg {
-            break m as i32;
-        } else if &(Scalar::zero() - Scalar::from(m)) * G == mg {
-            break -1 * (m as i32);
-        } else if m > 1000000 {
-            panic!("Looping too long");
-        } {
-            m += 1;
-        }
+    // let mut m: u32 = 0;
+    // loop {
+    //     if &Scalar::from(m) * G == mg {
+    //         break m as i32;
+    //     } else if &(Scalar::zero() - Scalar::from(m)) * G == mg {
+    //         break -1 * (m as i32);
+    //     } else if m > 1000000 {
+    //         panic!("Looping too long");
+    //     } {
+    //         m += 1;
+    //     }
+    // }
+}
+
+pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Vec<u8>) {
+    // Choose random point p to encrypt with ElGamal. H(p) is the symmetric key
+    // (we model H as a random oracle)
+    let p = Point::random(&mut OsRng);
+    let ct = elgamal_enc(pk, p);
+
+    let mut hasher = Sha256::new();
+    hasher.update(pzip(p));
+    let k = hasher.finalize();
+
+    let cipher = Aes256Gcm::new(&k);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let sym_ct = cipher.encrypt(&nonce, m.as_ref());
+
+    (ct, sym_ct, nonce)
+}
+
+pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, &[u8]), nonce: &[u8]) -> Vec<u8> {
+    let p = elgamal_dec(sk, ct.0);
+
+    let mut hasher = Sha256::new();
+    hasher.update(pzip(p));
+    let k = hasher.finalize();
+
+    let cipher = Aes256Gcm::new(&k);
+    let pt = cipher.decrypt(&nonce, ct.as_ref());
+
+    match pt {
+        Some(m) => m,
+        None => panic!("Symmetric decryption failed");
     }
 }
 
