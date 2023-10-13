@@ -2,22 +2,21 @@ use rand_core::OsRng;
 use rand::rngs;
 use std::collections::HashMap;
 use curve25519_dalek::constants;
-use curve25519_dalek::ristretto::RistrettoPoint;
-use curve25519_dalek::ristretto::RistrettoBasepointTable;
+use curve25519_dalek::ristretto::{RistrettoPoint, RistrettoBasepointTable, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use sha2::{Sha256, Sha512, Digest};
 use curve25519_dalek::digest::Update;
 use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit},
-    Aes256Gcm, Nonce, Key
+    Aes256Gcm, Nonce
 };
 use generic_array::typenum::U12;
 use generic_array;
 
 const MAX_POINTS: i32 = 1000000;
 
-const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
+pub(crate) const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
 
 type Point = RistrettoPoint;
 type Ciphertext = (Point, Point);
@@ -30,12 +29,20 @@ fn u_point() -> Point {
     RistrettoPoint::hash_from_bytes::<Sha512>("base u".as_bytes())
 }
 
-fn pzip(p: Point) -> [u8; 32] {
+pub(crate) fn pzip(p: Point) -> [u8; 32] {
     p.compress().to_bytes()
 }
 
-fn szip(s: Scalar) -> [u8; 32] {
+pub(crate) fn puzip(p: [u8; 32]) -> Point {
+    CompressedRistretto::from_slice(&p).decompress().unwrap()
+}
+
+pub(crate) fn szip(s: Scalar) -> [u8; 32] {
     s.to_bytes()
+}
+
+pub(crate) fn suzip(s: [u8; 32]) -> Scalar {
+    Scalar::from_bytes_mod_order(s)
 }
 
 pub(crate) fn elgamal_keygen() -> (Scalar, Point) {
@@ -159,8 +166,8 @@ pub(crate) fn int_to_scalar(m: i32) -> Scalar {
 
 #[derive(Clone)]
 pub(crate) struct TxAndProof {
-    r2: Point,     // Second element of a receipt: h^m
-    r3: Point,     // Third element of a receipt: g^mx
+    pub r2: Point,     // Second element of a receipt: h^m
+    pub r3: Point,     // Third element of a receipt: g^mx
     v: Point,      // Auxilliary variables for nonlinear proof
     e: Point,
     vx: Point,
@@ -244,7 +251,7 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     }
 }
 
-pub(crate) fn zk_tx_verify(pi: TxAndProof) -> bool {
+pub(crate) fn zk_tx_verify(pi: &TxAndProof) -> bool {
     let u = u_point();
 
     // Recompute c
@@ -469,8 +476,8 @@ pub(crate) fn signature_keygen() -> (SigningKey, VerifyingKey) {
     (sk, vk)
 }
 
-pub(crate) fn sign(sk: SigningKey, p: Point) -> Signature {
-    sk.sign(&pzip(p))
+pub(crate) fn sign(sk: &SigningKey, p: &Point) -> Signature {
+    (*sk).sign(&pzip(*p))
 }
 
 pub(crate) fn verify(vk: VerifyingKey, p: Point, s: Signature) -> bool {

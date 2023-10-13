@@ -1,4 +1,5 @@
 mod crypto;
+use crypto::{pzip, puzip, TxAndProof};
 use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
 use std::collections::HashMap;
 use std::vec::Vec;
@@ -14,7 +15,7 @@ type Com = [u8; 32];
 type Point = RistrettoPoint;
 type CPoint = [u8; 32];
 type Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>);
-type Receipt = (Ciphertext, crypto::TxAndProof);
+type Receipt = (Ciphertext, TxAndProof);
 
 struct Server {
     num_users: u32,
@@ -27,6 +28,7 @@ struct Server {
 }
 
 struct ServerTxTmp {
+    uid_s: u32, // Shopper's user ID
     i_s: Option<u32>, // Server's chosen index for card-swapping phase
     uid_b: Option<u32> // Barcode owner's user ID
 }
@@ -39,127 +41,151 @@ struct UserRecord {
     pk_enc: CPoint
 }
 
-// // User data stored in the server's Merkle tree
-// #[derive(Debug, Serialize, Clone)]
-// struct TreeEntry {
-//     uid: u32,
-//     barcode: u64,
-//     pk_enc: CPoint
-// }
+// User data stored in the server's Merkle tree
+#[derive(Debug, Serialize, Clone)]
+struct TreeEntry {
+    uid: u32,
+    barcode: u64,
+    pk_enc: CPoint
+}
 
-// impl TreeEntry {
-//     fn to_bytes(&self) -> Vec<u8> {
-//         bincode::serialize(&self).unwrap()
-//     }
-// }
+impl TreeEntry {
+    fn to_bytes(&self) -> Vec<u8> {
+        bincode::serialize(&self).unwrap()
+    }
+}
 
-// impl Server {
-//     pub fn new() -> Self {
-//         Server {
-//             num_users: 0,
-//             users: HashMap::new(),
-//             merkle_tree: MerkleTree::<algorithms::Sha256>::new(),
-//             tmp: HashMap::new()
-//         }
-//     }
+impl Server {
+    pub fn new() -> Self {
+        let keys = crypto::signature_keygen();
+        Server {
+            num_users: 0,
+            sk: keys.0,
+            vk: keys.1,
+            users: HashMap::new(),
+            receipts: HashMap::new(),
+            merkle_tree: MerkleTree::<algorithms::Sha256>::new(),
+            tmp: HashMap::new()
+        }
+    }
 
-//     fn register_user(&mut self, barcode: u64, pk_enc: CPoint) {
-//         let ct = &crypto::elgamal_enc(pk_enc, 0);
-//         let init_balance = (ct.0, ct.1);
+    fn register_user(&mut self, barcode: u64, pk_enc: CPoint) {
+        let init_balance = pzip(crypto::G*&crypto::int_to_scalar(0));
 
-//         let user_rec = UserRecord {
-//             barcode: barcode,
-//             balance: init_balance,
-//             pk_enc: pk_enc};
-//         let leaf = TreeEntry {
-//             uid: self.num_users,
-//             barcode: barcode,
-//             pk_enc: pk_enc
-//         };
+        let user_rec = UserRecord {
+            barcode: barcode,
+            balance: init_balance,
+            pk_enc: pk_enc};
+        let leaf = TreeEntry {
+            uid: self.num_users,
+            barcode: barcode,
+            pk_enc: pk_enc
+        };
 
-//         // Add user to list and to merkle tree
-//         self.users.insert(
-//             self.num_users,
-//             user_rec
-//         );
-//         self.merkle_tree.insert(algorithms::Sha256::hash(leaf.to_bytes().as_slice()));
-//         self.merkle_tree.commit();
+        // Add user to list and to merkle tree, and make a place to put receipts in transit
+        self.users.insert(
+            self.num_users,
+            user_rec
+        );
+        self.merkle_tree.insert(algorithms::Sha256::hash(leaf.to_bytes().as_slice()));
+        self.merkle_tree.commit();
 
-//         self.num_users += 1;
-//     }
+        self.receipts.insert(
+            self.num_users,
+            Vec::new()
+        );
 
-//     fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash) {
-//         let root = self.merkle_tree.root().unwrap();
-//         return (self.num_users, root);
-//     }
+        self.num_users += 1;
+    }
 
-//     // Step 1 of a transaction request
+    fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash, VerifyingKey) {
+        let root = self.merkle_tree.root().unwrap();
+        return (self.num_users, root, self.vk);
+    }
+
+    // Step 1 of a transaction request
     
-//     // Input: shopper user ID, commitment to a chosed random ID
-//     // Output: a server-chosen random ID
-//     fn process_tx_hello_response(&mut self, com: Com) -> u32 {
-//         let i_s = rand::thread_rng().gen_range(0..self.num_users);
-//         let mut tmp = ServerTxTmp {
-//             i_s: Some(i_s),
-//             uid_b: None
-//         };
+    // Input: shopper user ID, commitment to a chosed random ID
+    // Output: a server-chosen random ID
+    fn process_tx_hello_response(&mut self, com: Com, uid_s: u32) -> u32 {
+        let i_s = rand::thread_rng().gen_range(0..self.num_users);
+        let mut tmp = ServerTxTmp {
+            uid_s: uid_s,
+            i_s: Some(i_s),
+            uid_b: None
+        };
 
-//         // Store in-progress TX info server side
-//         self.tmp.insert(
-//             com,
-//             tmp
-//         );
+        // Store in-progress TX info server side
+        self.tmp.insert(
+            com,
+            tmp
+        );
         
-//         i_s
-//     }
+        i_s
+    }
 
-//     // Step 2 of a transaction request
+    // Step 2 of a transaction request
 
-//     // Input: shopper UID, opened commitment contents: client-chosen random ID and mask
-//     // Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
-//     fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, CPoint, MerkleProof<algorithms::Sha256>) {
-//         let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+    // Input: shopper UID, opened commitment contents: client-chosen random ID and mask
+    // Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
+    fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Point, MerkleProof<algorithms::Sha256>) {
+        let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
-//         // Recompute commitment and check that it matches.
-//         let mut hasher = Sha256::new();
-//         hasher.update(i_c.to_le_bytes());
-//         hasher.update(r);
-//         let com_test: Com = hasher.finalize().into();
+        // Recompute commitment and check that it matches.
+        let mut hasher = Sha256::new();
+        hasher.update(i_c.to_le_bytes());
+        hasher.update(r);
+        let com_test: Com = hasher.finalize().into();
 
-//         assert!(com_test == tx_id, "Invalid commit");
+        assert!(com_test == tx_id, "Invalid commit");
 
-//         let uid_b = (i_c + tmp.i_s.unwrap()) % self.num_users;
+        let uid_b = (i_c + tmp.i_s.unwrap()) % self.num_users;
 
-//         tmp.uid_b = Some(uid_b);
+        tmp.uid_b = Some(uid_b);
 
-//         let user_b: &UserRecord = &self.users.get(&uid_b).unwrap();
-//         let barcode = user_b.barcode;
-//         let pk_b = user_b.pk_enc;
+        let user_b: &UserRecord = &self.users.get(&uid_b).unwrap();
+        let barcode = user_b.barcode;
+        let pk_b = user_b.pk_enc;
 
-//         let pi: MerkleProof<algorithms::Sha256> = self.merkle_tree.proof(&[uid_b.try_into().unwrap()]);
+        let pi: MerkleProof<algorithms::Sha256> = self.merkle_tree.proof(&[uid_b.try_into().unwrap()]);
 
-//         (uid_b, barcode, pk_b, pi)
-//     }
+        (uid_b, barcode, puzip(pk_b), pi)
+    }
 
-//     // Step 3 of a transaction request
-//     fn process_tx(&mut self, shopper: u32, cts: Ciphertext, ctb: Ciphertext, pi: crypto::CompressedCtEqProof, tx_id: Com) {
-//         // let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+    // Step 3 of a transaction request
 
-//         assert!(crypto::zk_ct_eq_verify(pi));
+    // Input: tx_id, encrypted m, masked m (h^m) masked points (g^mx), and ZK correctness proof
+    // Output: a signature on h^m
+    fn process_tx(&mut self, ct: Ciphertext, tx: TxAndProof, tx_id: Com) -> Signature {
+        
+        assert!(crypto::zk_tx_verify(&tx), "Transaction proof failed");
 
-//         self.tmp.remove(&tx_id);
-//     }
+        let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+        let uid_s = tmp.uid_s;
+        let uid_b = tmp.uid_b.unwrap();
+        
+        let hm = &tx.r2;
+        let gmx = &tx.r3;
 
-//     // fn settle_balance_hello
-//     fn settle_balance_hello(&self, uid: u32) -> Ciphertext {
-//         self.users.get(&uid).unwrap().balance
-//     }
+        // Update both users' balances
+        let bal_s = puzip(self.users[&uid_s].balance);
+        let bal_b = puzip(self.users[&uid_b].balance);
+        self.users[&uid_s].balance = pzip(bal_s + gmx);
+        self.users[&uid_b].balance = pzip(bal_b + gmx*&crypto::int_to_scalar(-1));
+        
+        // Store the receipt to send to the barcode owner
+        let rct  = (ct, tx);
+        let rcts = self.receipts.get_mut(&uid_b).unwrap();
+        rcts.push(rct);
+        self.receipts.insert(
+            uid_b,
+            rcts.to_vec()
+        );
 
-//     // fn settle_balance_finalize
-//     fn settle_balance_finalize(&self, pi: crypto::CompressedCtDecProof) -> bool {
-//         crypto::zk_ct_dec_verify(pi)
-//     }
-// }
+        // Sign and return h^m
+        crypto::sign(&self.sk, hm)
+    }
+}
 
 // struct Client {
 //     barcode: u64,
