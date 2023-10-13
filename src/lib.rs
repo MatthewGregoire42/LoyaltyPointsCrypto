@@ -1,39 +1,43 @@
 mod crypto;
-// use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
-// use std::collections::HashMap;
-// use std::vec::Vec;
-// use serde_derive::Serialize;
-// use rand::Rng;
-// use sha2::{Sha256, Digest};
-// use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
-// use curve25519_dalek::RistrettoPoint;
+use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
+use std::collections::HashMap;
+use std::vec::Vec;
+use serde_derive::Serialize;
+use rand::Rng;
+use sha2::{Sha256, Digest};
+use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use curve25519_dalek::ristretto::RistrettoPoint;
+use aes_gcm::{Nonce};
+use generic_array::typenum::U12;
 
-// type Com = [u8; 32];
-// type Receipt = ();
+type Com = [u8; 32];
+type Point = RistrettoPoint;
+type CPoint = [u8; 32];
+type Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>);
+type Receipt = (Ciphertext, crypto::TxAndProof);
 
-// type Point = RistrettoPoint;
+struct Server {
+    num_users: u32,
+    sk: SigningKey,
+    vk: VerifyingKey,
+    users: HashMap<u32, UserRecord>,
+    receipts: HashMap<u32, Vec<Receipt>>,
+    merkle_tree: MerkleTree<algorithms::Sha256>,
+    tmp: HashMap<Com, ServerTxTmp>,
+}
 
-// struct Server {
-//     num_users: u32,
-//     sk: SigningKey,
-//     vk: VerifyingKey,
-//     users: HashMap<u32, UserRecord>,
-//     merkle_tree: MerkleTree<algorithms::Sha256>,
-//     tmp: HashMap<Com, ServerTxTmp>,
-// }
+struct ServerTxTmp {
+    i_s: Option<u32>, // Server's chosen index for card-swapping phase
+    uid_b: Option<u32> // Barcode owner's user ID
+}
 
-// struct ServerTxTmp {
-//     i_s: Option<u32>, // Server's chosen index for card-swapping phase
-//     uid_b: Option<u32> // Barcode owner's user ID
-// }
-
-// // The server's record of a user in the system
-// #[derive(Debug, Serialize, Clone)]
-// struct UserRecord {
-//     barcode: u64,
-//     balance: Point,
-//     pk_enc: CPoint
-// }
+// The server's record of a user in the system
+#[derive(Debug, Serialize, Clone)]
+struct UserRecord {
+    barcode: u64,
+    balance: CPoint,
+    pk_enc: CPoint
+}
 
 // // User data stored in the server's Merkle tree
 // #[derive(Debug, Serialize, Clone)]

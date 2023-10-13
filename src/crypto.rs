@@ -5,13 +5,15 @@ use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::ristretto::RistrettoBasepointTable;
 use curve25519_dalek::scalar::Scalar;
-use sha2::{Sha256, Sha512};
+use sha2::{Sha256, Sha512, Digest};
 use curve25519_dalek::digest::Update;
 use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit},
     Aes256Gcm, Nonce, Key
 };
+use generic_array::typenum::U12;
+use generic_array;
 
 const MAX_POINTS: i32 = 1000000;
 
@@ -51,25 +53,6 @@ pub(crate) fn elgamal_enc(pk: Point, m: Point) -> Ciphertext {
 }
 
 // Takes as parameters:
-//      pk: a Point
-//      m:  a message to encrypt (random mask chosen by client)
-// pub(crate) fn elgamal_enc(pk: Point, m: i32) -> (Point, Point, Scalar) {
-//     let r: Scalar = Scalar::random(&mut OsRng);
-
-//     // We need to convert m to a scalar
-//     let m_pos: u32 = m.abs() as u32;
-//     let m_scalar = if m == m_pos as i32 { Scalar::from(m_pos) }
-//                    else { Scalar::zero() - Scalar::from(m_pos) };
-
-//     let c1 = &r*G;
-//     let c2 = &m_scalar*G + r*pk;
-
-//     // y is a secret; it needs to be kept by the client to generate a proof
-//     // and then is discarded afterwards.
-//     (c1, c2, r)
-// }
-
-// Takes as parameters:
 //      sk: a compressed Scalar
 //      ct:  a compressed (Point, Point) ciphertext
 // Returns the decrypted chosen mask
@@ -94,36 +77,41 @@ pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> Point {
     // }
 }
 
-pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Vec<u8>) {
+pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12>) {
     // Choose random point p to encrypt with ElGamal. H(p) is the symmetric key
     // (we model H as a random oracle)
     let p = Point::random(&mut OsRng);
     let ct = elgamal_enc(pk, p);
 
     let mut hasher = Sha256::new();
-    hasher.update(pzip(p));
+    Digest::update(&mut hasher, pzip(p));
     let k = hasher.finalize();
 
     let cipher = Aes256Gcm::new(&k);
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let nonce = Aes256Gcm::generate_nonce(&mut rngs::OsRng);
     let sym_ct = cipher.encrypt(&nonce, m.as_ref());
+
+    let sym_ct = match sym_ct {
+        Ok(ct) => ct,
+        Err(_) => panic!("Symmetric encryption failed")
+    };
 
     (ct, sym_ct, nonce)
 }
 
-pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, &[u8]), nonce: &[u8]) -> Vec<u8> {
+pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, &[u8]), nonce: Nonce<U12>) -> Vec<u8> {
     let p = elgamal_dec(sk, ct.0);
 
     let mut hasher = Sha256::new();
-    hasher.update(pzip(p));
+    Digest::update(&mut hasher, pzip(p));
     let k = hasher.finalize();
 
     let cipher = Aes256Gcm::new(&k);
-    let pt = cipher.decrypt(&nonce, ct.as_ref());
+    let pt = cipher.decrypt(&nonce, ct.1);
 
     match pt {
-        Some(m) => m,
-        None => panic!("Symmetric decryption failed");
+        Ok(m) => m,
+        Err(_) => panic!("Symmetric decryption failed")
     }
 }
 
@@ -160,24 +148,6 @@ pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
 
 pub(crate) fn add_ciphertexts(ct0: Ciphertext, ct1: Ciphertext) -> Ciphertext {
     ((ct0.0 + ct1.0), (ct0.1 + ct1.1))
-}
-
-pub(crate) struct TxCiphertextData {
-    ciphertext: (Point, Point),
-    y: Scalar,
-    m: Scalar,
-    public_h: Point
-}
-
-impl TxCiphertextData {
-    pub(crate) fn new(ct: Ciphertext, y: Scalar, m: i32, h: Point) -> Self {
-        TxCiphertextData {
-            ciphertext: ct,
-            y: y,
-            m: int_to_scalar(m),
-            public_h: h,
-        }
-    }
 }
 
 pub(crate) fn int_to_scalar(m: i32) -> Scalar {
@@ -241,7 +211,7 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     let mut hasher = Sha512::default();
     for elt in [r2, r3, v, e, vx, ex, r2_t, r3_t, v_t, e_t, vx_t, ex_t].iter() {
         let elt_bytes = pzip(*elt);
-        hasher.update(&elt_bytes);
+        Update::update(&mut hasher, &elt_bytes);
     }
     
     let c = Scalar::from_hash(hasher);
@@ -282,7 +252,7 @@ pub(crate) fn zk_tx_verify(pi: TxAndProof) -> bool {
     for elt in [pi.r2, pi.r3, pi.v, pi.e, pi.vx, pi.ex,
                 pi.r2_t, pi.r3_t, pi.v_t, pi.e_t, pi.vx_t, pi.ex_t].iter() {
         let elt_bytes = pzip(*elt);
-        hasher.update(&elt_bytes);
+        Update::update(&mut hasher, &elt_bytes);
     }
     let c = Scalar::from_hash(hasher);
 
@@ -383,12 +353,12 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: Vec::<Point>,
     // Challenge
     let mut hasher = Sha512::default();
 
-    hasher.update(&pzip(b1));
-    hasher.update(&pzip(b2));
+    Update::update(&mut hasher, &pzip(b1));
+    Update::update(&mut hasher, &pzip(b2));
     for i in 0..n {
         for elt in [b_ms[i], v_ts[i], e_ts[i], vx_ts[i], ex_ts[i]].iter() {
             let elt_bytes: [u8; 32] = pzip(*elt);
-            hasher.update(&elt_bytes);
+            Update::update(&mut hasher, &elt_bytes);
         }
     }
     
@@ -439,12 +409,12 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
     // Recompute c
     let mut hasher = Sha512::default();
 
-    hasher.update(&pzip(b1));
-    hasher.update(&pzip(b2));
+    Update::update(&mut hasher, &pzip(b1));
+    Update::update(&mut hasher, &pzip(b2));
     for i in 0..n {
         for elt in [b_ms[i], pi.v_ts[i], pi.e_ts[i], pi.vx_ts[i], pi.ex_ts[i]].iter() {
             let elt_bytes: [u8; 32] = pzip(*elt);
-            hasher.update(&elt_bytes);
+            Update::update(&mut hasher, &elt_bytes);
         }
     }
     
