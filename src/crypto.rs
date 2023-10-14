@@ -21,7 +21,7 @@ pub(crate) const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_T
 type Point = RistrettoPoint;
 type Ciphertext = (Point, Point);
 
-fn h_point() -> Point {
+pub(crate) fn h_point() -> Point {
     RistrettoPoint::hash_from_bytes::<Sha512>("base h".as_bytes())
 }
 
