@@ -5,10 +5,6 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[lib]
-name = "crypto"
-crate-type = ["cdylib"]
-
 [dependencies]
 curve25519-dalek = "3"
 rand = "0.8.5"

@@ -1,5 +1,5 @@
 mod crypto;
-use crate::crypto::{pzip, puzip, TxAndProof, h_point, SettleProof};
+use crypto::{pzip, puzip, TxAndProof, h_point, SettleProof};
 use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
 use std::collections::{HashMap, HashSet};
 use std::vec::Vec;
@@ -22,7 +22,7 @@ type Receipt = (Ciphertext, TxAndProof);
 // Server code
 //////////////////////////////////////////////////////////////////
 
-struct Server {
+pub(crate) struct Server {
     num_users: u32,
     sk: SigningKey,
     vk: VerifyingKey,
@@ -30,6 +30,7 @@ struct Server {
     receipts: HashMap<u32, Vec<Receipt>>,
     merkle_tree: MerkleTree<algorithms::Sha256>,
     tmp: HashMap<Com, ServerTxTmp>,
+    default_bal: CPoint
 }
 
 struct ServerTxTmp {
@@ -61,7 +62,7 @@ impl TreeEntry {
 }
 
 impl Server {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let keys = crypto::signature_keygen();
         Server {
             num_users: 0,
@@ -70,16 +71,15 @@ impl Server {
             users: HashMap::new(),
             receipts: HashMap::new(),
             merkle_tree: MerkleTree::<algorithms::Sha256>::new(),
-            tmp: HashMap::new()
+            tmp: HashMap::new(),
+            default_bal: pzip(crypto::G*&crypto::int_to_scalar(0))
         }
     }
 
-    fn register_user(&mut self, barcode: u64, pk_enc: CPoint) {
-        let init_balance = pzip(crypto::G*&crypto::int_to_scalar(0));
-
+    pub(crate) fn register_user(&mut self, barcode: u64, pk_enc: CPoint) {
         let user_rec = UserRecord {
             barcode: barcode,
-            balance: init_balance,
+            balance: self.default_bal,
             pk_enc: pk_enc};
         let leaf = TreeEntry {
             uid: self.num_users,
@@ -103,7 +103,7 @@ impl Server {
         self.num_users += 1;
     }
 
-    fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash, VerifyingKey) {
+    pub(crate) fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash, VerifyingKey) {
         let root = self.merkle_tree.root().unwrap();
         return (self.num_users, root, self.vk);
     }
@@ -112,7 +112,7 @@ impl Server {
     
     // Input: shopper user ID, commitment to a chosed random ID
     // Output: a server-chosen random ID
-    fn process_tx_hello_response(&mut self, com: Com, uid_s: u32) -> u32 {
+    pub(crate) fn process_tx_hello_response(&mut self, com: Com, uid_s: u32) -> u32 {
         let i_s = rand::thread_rng().gen_range(0..self.num_users);
         let tmp = ServerTxTmp {
             uid_s: uid_s,
@@ -133,7 +133,7 @@ impl Server {
 
     // Input: shopper UID, opened commitment contents: client-chosen random ID and mask
     // Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
-    fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Point, MerkleProof<algorithms::Sha256>) {
+    pub(crate) fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Point, MerkleProof<algorithms::Sha256>) {
         let tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         // Recompute commitment and check that it matches.
@@ -161,7 +161,7 @@ impl Server {
 
     // Input: tx_id, encrypted m, masked m (h^m) masked points (g^mx), and ZK correctness proof
     // Output: a signature on h^m
-    fn process_tx(&mut self, ct: Ciphertext, tx: TxAndProof, tx_id: Com) -> Signature {
+    pub(crate) fn process_tx(&mut self, ct: Ciphertext, tx: TxAndProof, tx_id: Com) -> Signature {
         
         assert!(crypto::zk_tx_verify(&tx), "Transaction proof failed");
 
@@ -188,7 +188,7 @@ impl Server {
     }
 
     // Receipt distribution
-    fn send_receipts(&mut self, uid: u32) -> Vec<(Receipt, Signature)> {
+    pub(crate) fn send_receipts(&mut self, uid: u32) -> Vec<(Receipt, Signature)> {
         let mut out = Vec::new();
 
         let rcts = self.receipts.get_mut(&uid).unwrap();
@@ -207,7 +207,7 @@ impl Server {
     }
 
     // Accept or reject a client's request to settle
-    fn settle_balance(&self, uid: u32, x: i32, hms: Vec<Point>, sigmas: Vec<Signature>, pi: SettleProof) -> bool {
+    pub(crate) fn settle_balance(&self, uid: u32, x: i32, hms: Vec<Point>, sigmas: Vec<Signature>, pi: SettleProof) -> bool {
         let server_bal = crypto::puzip(self.users[&uid].balance);
 
         let gx = crypto::G*(&crypto::int_to_scalar(x));
@@ -231,8 +231,8 @@ impl Server {
 
 type ClientReceipt = (Scalar, Scalar, Point, Signature); // m, h^m, sigma_(h^m) stored until settling time
 
-struct Client {
-    barcode: u64,
+pub(crate) struct Client {
+    pub barcode: u64,
     uid: u32,
     num_users: u32,
     merkle_root: Option<<algorithms::Sha256 as rs_merkle::Hasher>::Hash>,
@@ -256,7 +256,7 @@ struct ClientTxTmp {
 }
 
 impl Client {
-    fn new(barcode: u64) -> Self {
+    pub(crate) fn new(barcode: u64) -> Self {
         let keys = crypto::elgamal_keygen();
         Client {
             barcode: barcode,
@@ -273,11 +273,11 @@ impl Client {
         }
     }
 
-    fn register_with_server(&self) -> (u64, Point) {
-        (self.barcode, self.pk_enc)
+    pub(crate) fn register_with_server(&self) -> (u64, [u8; 32]) {
+        (self.barcode, crypto::pzip(self.pk_enc))
     }
 
-    fn update_state(&mut self, uid: u32, num_users: u32, merkle_root: <algorithms::Sha256 as Hasher>::Hash) {
+    pub(crate) fn update_state(&mut self, uid: u32, num_users: u32, merkle_root: <algorithms::Sha256 as Hasher>::Hash) {
         self.uid = uid;
         self.num_users = num_users;
         self.merkle_root = Some(merkle_root);
@@ -287,7 +287,7 @@ impl Client {
 
     // Input: N/A
     // Output: commitment to a randomly chosen user ID
-    fn process_tx_hello(&mut self) -> Com {
+    pub(crate) fn process_tx_hello(&mut self) -> Com {
         // Commit to a random index and send it to the server
         let i_c = rand::thread_rng().gen_range(0..self.num_users);
         let r = rand::thread_rng().gen::<[u8; 32]>();
@@ -316,7 +316,7 @@ impl Client {
 
     // Input: server's randomly chosen barcode UID
     // Output: opened commitment to client-chosed barcode UID
-    fn process_tx_compute_id(&mut self, i_s: u32, tx_id: Com) -> (u32, [u8; 32]) {
+    pub(crate) fn process_tx_compute_id(&mut self, i_s: u32, tx_id: Com) -> (u32, [u8; 32]) {
         let tmp: &mut ClientTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         let i = (tmp.i_c.unwrap() + i_s) % self.num_users;
@@ -325,7 +325,7 @@ impl Client {
         (tmp.i_c.unwrap(), tmp.r.unwrap())
     }
 
-    fn verify_merkle_proof(&mut self, barcode: u64, pi: MerkleProof<algorithms::Sha256>, pkb: Point, tx_id: Com) -> bool {
+    pub(crate) fn verify_merkle_proof(&mut self, barcode: u64, pi: MerkleProof<algorithms::Sha256>, pkb: Point, tx_id: Com) -> bool {
         let tmp: &ClientTxTmp = self.tmp.get(&tx_id).unwrap();
 
         let leaf = TreeEntry {
@@ -343,7 +343,7 @@ impl Client {
     }
 
     // Step 3 of a transaction request
-    fn process_tx(&mut self, pi: MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Point, tx_id: Com) -> (Ciphertext, TxAndProof) {
+    pub(crate) fn process_tx(&mut self, pi: MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Point, tx_id: Com) -> (Ciphertext, TxAndProof) {
         // Verify Merkle proof that the agreed upon index is in the tree
         self.verify_merkle_proof(barcode, pi, pkb, tx_id);
 
@@ -369,7 +369,7 @@ impl Client {
         (m_ct, pi)
     }
 
-    fn process_tx_coda(&mut self, sigma: Signature, tx_id: Com) {
+    pub(crate) fn process_tx_coda(&mut self, sigma: Signature, tx_id: Com) {
         let tmp: &ClientTxTmp = self.tmp.get(&tx_id).unwrap();
         let m = tmp.m.unwrap();
         let hm = tmp.hm.unwrap();
@@ -382,7 +382,7 @@ impl Client {
 
     // Receipt = (Ciphertext, TxAndProof)
     // Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>)
-    fn process_receipts(&mut self, rcts: Vec<(Receipt, Signature)>) {
+    pub(crate) fn process_receipts(&mut self, rcts: Vec<(Receipt, Signature)>) {
         for rct in rcts {
             let ct = rct.0.0;
             let tx_and_proof = rct.0.1;
@@ -419,7 +419,7 @@ impl Client {
 
        The client then can reset their state.
     */
-    fn settle_balance(&self) -> (i32, Vec<Point>, Vec<Signature>, SettleProof) {
+    pub(crate) fn settle_balance(&self) -> (i32, Vec<Point>, Vec<Signature>, SettleProof) {
 
         let x = self.bal;
         let server_bal = self.server_bal;
