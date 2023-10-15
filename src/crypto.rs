@@ -106,7 +106,7 @@ pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12
     (ct, sym_ct, nonce)
 }
 
-pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, &[u8]), nonce: Nonce<U12>) -> Vec<u8> {
+pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) -> [u8; 32] {
     let p = elgamal_dec(sk, ct.0);
 
     let mut hasher = Sha256::new();
@@ -114,10 +114,10 @@ pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, &[u8]), nonce: Nonce<U12>) ->
     let k = hasher.finalize();
 
     let cipher = Aes256Gcm::new(&k);
-    let pt = cipher.decrypt(&nonce, ct.1);
+    let pt = cipher.decrypt(&nonce, ct.1.as_ref());
 
     match pt {
-        Ok(m) => m,
+        Ok(m) => m.try_into().unwrap(),
         Err(_) => panic!("Symmetric decryption failed")
     }
 }
@@ -299,8 +299,8 @@ pub(crate) struct SettleProof {
 // for each transaction touching this balance.
 // Output: four auxilliary variables for each transaction, and the commitment/response
 // components of the corresponding ZK proof.
-pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: Vec::<Point>,
-                              xs: Vec::<Scalar>, ms: Vec::<Scalar>) -> SettleProof {
+pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
+                              xs: &Vec::<Scalar>, ms: &Vec::<Scalar>) -> SettleProof {
     // Decompress
     let n = xs.len();                        // Number of transactions
     let b1 = &int_to_scalar(x) * G;          // Algebraic balance representation
@@ -480,6 +480,6 @@ pub(crate) fn sign(sk: &SigningKey, p: &Point) -> Signature {
     (*sk).sign(&pzip(*p))
 }
 
-pub(crate) fn verify(vk: VerifyingKey, p: Point, s: Signature) -> bool {
-    vk.verify(&pzip(p), &s).is_ok()
+pub(crate) fn verify(vk: VerifyingKey, p: &Point, s: Signature) -> bool {
+    vk.verify(&pzip(*p), &s).is_ok()
 }
