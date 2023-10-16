@@ -1,5 +1,5 @@
 mod crypto;
-use crypto::{pzip, puzip, TxAndProof, h_point, SettleProof};
+pub(crate) use crypto::{pzip, puzip, TxAndProof, h_point, SettleProof};
 use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
 use std::collections::{HashMap, HashSet};
 use std::vec::Vec;
@@ -12,11 +12,11 @@ use curve25519_dalek::scalar::Scalar;
 use aes_gcm::{Nonce};
 use generic_array::typenum::U12;
 
-type Com = [u8; 32];
-type Point = RistrettoPoint;
-type CPoint = [u8; 32];
-type Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>);
-type Receipt = (Ciphertext, TxAndProof);
+pub(crate) type Com = [u8; 32];
+pub(crate) type Point = RistrettoPoint;
+pub(crate) type CPoint = [u8; 32];
+pub(crate) type Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>);
+pub(crate) type Receipt = (Ciphertext, TxAndProof);
 
 //////////////////////////////////////////////////////////////////
 // Server code
@@ -103,9 +103,9 @@ impl Server {
         self.num_users += 1;
     }
 
-    pub(crate) fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash, VerifyingKey) {
+    pub(crate) fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash) {
         let root = self.merkle_tree.root().unwrap();
-        return (self.num_users, root, self.vk);
+        return (self.num_users, root);
     }
 
     // Step 1 of a transaction request
@@ -325,7 +325,7 @@ impl Client {
         (tmp.i_c.unwrap(), tmp.r.unwrap())
     }
 
-    pub(crate) fn verify_merkle_proof(&mut self, barcode: u64, pi: MerkleProof<algorithms::Sha256>, pkb: Point, tx_id: Com) -> bool {
+    pub(crate) fn verify_merkle_proof(&mut self, barcode: u64, pi: &MerkleProof<algorithms::Sha256>, pkb: Point, tx_id: Com) -> bool {
         let tmp: &ClientTxTmp = self.tmp.get(&tx_id).unwrap();
 
         let leaf = TreeEntry {
@@ -335,7 +335,7 @@ impl Client {
         };
         let tree_contents = algorithms::Sha256::hash(leaf.to_bytes().as_slice());
 
-        let test = pi.verify(self.merkle_root.unwrap(), &[tmp.uid_b.unwrap().try_into().unwrap()], &[tree_contents], 1);
+        let test = pi.verify(self.merkle_root.unwrap(), &[tmp.uid_b.unwrap().try_into().unwrap()], &[tree_contents], self.num_users.try_into().unwrap());
 
         assert!(test);
 
@@ -343,7 +343,7 @@ impl Client {
     }
 
     // Step 3 of a transaction request
-    pub(crate) fn process_tx(&mut self, pi: MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Point, tx_id: Com) -> (Ciphertext, TxAndProof) {
+    pub(crate) fn process_tx(&mut self, pi: &MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Point, tx_id: Com) -> (Ciphertext, TxAndProof) {
         // Verify Merkle proof that the agreed upon index is in the tree
         self.verify_merkle_proof(barcode, pi, pkb, tx_id);
 
