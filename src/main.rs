@@ -63,9 +63,6 @@ fn main() {
     let max_users = 10000;
     let step = min_users;
 
-    let mut time_client = Duration::ZERO;
-    let mut time_server = Duration::ZERO;
-
     let mut server = Server::new();
     let mut clients = Vec::<Client>::with_capacity(max_users);
 
@@ -73,7 +70,8 @@ fn main() {
     // Initialize a system with a certain number of users,
     // and time how long it takes to process <n_txs> transactions
     for n_users in (min_users..(max_users+1)).step_by(step) {
-        println!("{}", n_users);
+        let mut time_client = Duration::ZERO;
+        let mut time_server = Duration::ZERO;
 
         // Initialise another <step> clients and register with server
         for i in 0..step {
@@ -203,5 +201,19 @@ fn main() {
         }
         time_client += now.elapsed();
         // -----------------------------
+
+        println!("{} Client: {:.2?}, Server: {:.2?}", n_users, time_client, time_server);
     }
+
+    println!("----------------------------");
+    println!("--- Receipt Distribution ---");
+    println!("----------------------------");
+    // Scales with number of points in the receipt.
+    // Process receipts with varying amounts of points in them.
+
+    println!("------------------------");
+    println!("--- Balance Settling ---");
+    println!("------------------------");
+    // Scales with number of transactions.
+    // Process with varying the number of transactions
 }

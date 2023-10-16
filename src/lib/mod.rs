@@ -401,13 +401,16 @@ impl Client {
             }
             self.seen_ms.insert(m_bits);
 
-            assert!(crypto::zk_tx_verify(&tx_and_proof));
-
             let x = crypto::dlog(crypto::G * &m, gmx);
+            let x_scalar = crypto::int_to_scalar(x);
+
+            // No need to compute the entire ZK proof.
+            assert!(crypto::h_point() * &m == hm);
+            assert!(crypto::G * &(m * x_scalar) == gmx);
 
             self.bal -= x;
             self.server_bal = self.server_bal + (gmx * crypto::int_to_scalar(-1));
-            self.receipts.push((crypto::int_to_scalar(x), m, hm, rct.1));
+            self.receipts.push((x_scalar, m, hm, rct.1));
         }
     }
 
