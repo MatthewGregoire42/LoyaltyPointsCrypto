@@ -212,6 +212,7 @@ impl Server {
 
         let gx = crypto::G*(&crypto::int_to_scalar(x));
 
+        // Issue is with verifying signatures
         for i in 0..sigmas.len() {
             let hm = &hms[i];
             let s = sigmas[i];
@@ -221,6 +222,7 @@ impl Server {
             }
         }
 
+        println!("settling");
         crypto::zk_settle_verify(x, server_bal, hms, pi)
     }
 }
@@ -344,6 +346,8 @@ impl Client {
 
     // Step 3 of a transaction request
     pub(crate) fn process_tx(&mut self, pi: &MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Point, tx_id: Com) -> (Ciphertext, TxAndProof) {
+        self.bal += points;
+
         // Verify Merkle proof that the agreed upon index is in the tree
         self.verify_merkle_proof(barcode, pi, pkb, tx_id);
 
@@ -410,7 +414,7 @@ impl Client {
 
             self.bal -= x;
             self.server_bal = self.server_bal + (gmx * crypto::int_to_scalar(-1));
-            self.receipts.push((x_scalar, m, hm, rct.1));
+            self.receipts.push((x_scalar, m, hm * crypto::int_to_scalar(-1), rct.1));
         }
     }
 

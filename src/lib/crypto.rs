@@ -326,9 +326,6 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
     let mut exs = Vec::<Point>::with_capacity(n);
 
     // Commitment
-    let b1_t = Point::random(&mut OsRng);
-    let b2_t = Point::random(&mut OsRng);
-
     let mut m_ts = Vec::<Scalar>::with_capacity(n);
     let mut x_ts = Vec::<Scalar>::with_capacity(n);
     let mut a_ts = Vec::<Scalar>::with_capacity(n);
@@ -342,13 +339,16 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
     let mut ex_ts = Vec::<Point>::with_capacity(n);
     for i in 0..n {
         aas.push(xs[i]*ms[i]);
-        ys.push(Scalar::random(&mut OsRng));
+        let y = Scalar::random(&mut OsRng);
+        ys.push(y);
         ts.push(xs[i]*ys[i]);
 
-        vs.push(Point::random(&mut OsRng));
-        es.push(Point::random(&mut OsRng));
-        vxs.push(Point::random(&mut OsRng));
-        exs.push(Point::random(&mut OsRng));
+        let v = &y * G;
+        let e = &y * u + &ms[i] * G;
+        vs.push(v);
+        es.push(e);
+        vxs.push(v*xs[i]);
+        exs.push(e*xs[i]);
 
         m_ts.push(Scalar::random(&mut OsRng));
         x_ts.push(Scalar::random(&mut OsRng));
@@ -362,6 +362,17 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
         vx_ts.push(&t_ts[i]*G);
         ex_ts.push(&t_ts[i]*u + (&a_ts[i]*G));
     }
+
+    // TODO: can't do this as just one sum, need to multiply each x_i term individually (and change the verification as well)
+    let mut at_sum = Scalar::zero();
+    let mut xt_sum = Scalar::zero();
+    for i in 0..n {
+        at_sum = at_sum + a_ts[i];
+        xt_sum = xt_sum + x_ts[i];
+    }
+
+    let b1_t = &xt_sum * G;
+    let b2_t = &at_sum * G;
 
     // Challenge
     let mut hasher = Sha512::default();
@@ -415,6 +426,7 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
 
 pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleProof) -> bool {
     let n = b_ms.len();
+    println!("{}", x);
     let b1 = &int_to_scalar(x)*G;
     let b2 = bal;
     let u = u_point();
@@ -444,6 +456,7 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
     let check_b2 = &az_sum * G == pi.b2_t + (&c * b2);
 
     let mut result = check_b1 && check_b2;
+    println!("{} {}", check_b1, check_b2);
     for i in 0..n {
         let b_m = b_ms[i];
         let v = pi.vs[i];
@@ -467,6 +480,8 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
         let check3 = &y_z*u + &m_z*G == e_t + (&c*e);
         let check4 = &t_z*G == vx_t + (&c*vx);
         let check5 = &t_z*u + &a_z*G == ex_t + (&c*ex);
+
+        println!("{} {} {} {} {}", check1, check2, check3, check4, check5);
 
         result = result && check1 && check2 && check3 && check4 && check5;
         if !result {
