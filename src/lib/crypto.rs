@@ -14,7 +14,7 @@ use aes_gcm::{
 use generic_array::typenum::U12;
 use generic_array;
 
-const MAX_POINTS: i32 = 1000000;
+const MAX_POINTS: i32 = 100000;
 
 pub(crate) const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
 
@@ -65,23 +65,6 @@ pub(crate) fn elgamal_enc(pk: Point, m: Point) -> Ciphertext {
 // Returns the decrypted chosen mask
 pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> Point {
     ct.1 + (Scalar::zero() - sk) * ct.0
-
-    // Brute force DL decryption
-    // The result of ElGamal decryption (mg) is the value m*g. Assuming m is a small scalar,
-    // we can extract it by guessing and checking different values until we find an m
-    // such that mg = m*g.
-    // let mut m: u32 = 0;
-    // loop {
-    //     if &Scalar::from(m) * G == mg {
-    //         break m as i32;
-    //     } else if &(Scalar::zero() - Scalar::from(m)) * G == mg {
-    //         break -1 * (m as i32);
-    //     } else if m > 1000000 {
-    //         panic!("Looping too long");
-    //     } {
-    //         m += 1;
-    //     }
-    // }
 }
 
 pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12>) {
@@ -124,32 +107,56 @@ pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) 
 
 // Use the baby-step giant-step algorithm to compute the discrete log between
 // two values (when the discrete log is small). This is only ever used to unmask a
-// number of loyalty points, so we limit our search space to (-max points, max points).
+// number of loyalty points which, by construction of our scheme, is always
+// positive, so we limit our search space to (0, max points).
 pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
     // create lookup table for small powers of the base.
     let mut table = HashMap::new();
 
-    let m = ((2*MAX_POINTS) as f32).sqrt() as i32 + 1;
+    println!("Computing table");
+    let m = (MAX_POINTS as f32).sqrt() as i32 + 1;
     for i in 0..m {
         let k = pzip(&int_to_scalar(i)*g);
         table.insert(k, i);
     }
+    println!("Table done");
 
     let mut res: Option<i32> = None;
-    let g_inv = &int_to_scalar(-1*m)*g;
-    let mut gamma = gx;
+    let gm_inv = &int_to_scalar(-1*m)*g;
+    println!("Searching");
+    let mut gamma = gx.clone();
     for i in 0..m {
         let k = pzip(gamma);
         if table.contains_key(&k) {
             res = Some(i*m + table[&k]);
             break;
         }
-        gamma = gamma + g_inv;
+        gamma = gamma + gm_inv;
     }
+    println!("Done searching");
 
     match res {
         Some(x) => x,
         None => panic!("Number of points out of bounds")
+    }
+}
+
+// Brute force DL decryption
+// The result of ElGamal decryption (mg) is the value m*g. Assuming m is a small scalar,
+// we can extract it by guessing and checking different values until we find an m
+// such that mg = m*g.
+pub(crate) fn dlog_brute_force(g: Point, gx: Point) -> i32 {
+    let mut m: u32 = 0;
+    loop {
+        if &Scalar::from(m) * g == gx {
+            break m as i32;
+        } else if &(Scalar::zero() - Scalar::from(m)) * G == gx {
+            break -1 * (m as i32);
+        } else if m > 1000000 {
+            panic!("Looping too long");
+        } {
+            m += 1;
+        }
     }
 }
 
@@ -305,7 +312,6 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
     let n = xs.len();                        // Number of transactions
     let b1 = &int_to_scalar(x) * G;          // Algebraic balance representation
     let b2 = bal;                            // Masked balance
-    let xs = Vec::<Scalar>::with_capacity(n);
     let h = h_point();
     let u = u_point();
 

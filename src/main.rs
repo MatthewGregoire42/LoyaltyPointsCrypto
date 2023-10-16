@@ -58,9 +58,12 @@ fn main() {
         sigma: Option<Signature>
     }
 
-    let n_txs = 500;
-    let min_users = 1000;
-    let max_users = 10000;
+    // let n_txs = 500;
+    // let min_users = 1000;
+    // let max_users = 10000;
+    let n_txs = 10;
+    let min_users = 10;
+    let max_users = 10;
     let step = min_users;
 
     let mut server = Server::new();
@@ -211,9 +214,118 @@ fn main() {
     // Scales with number of points in the receipt.
     // Process receipts with varying amounts of points in them.
 
+    // let n_txs = 100;
+    // let min_points: i32 = 5;
+    // let max_points: i32 = 50;
+    let n_txs = 10;
+    let min_points = 5;
+    let max_points = 5;
+    let step = min_points;
+
+    for n_points in (min_points..(max_points+1)).step_by(step.try_into().unwrap()) {
+        // Only initialize one client, so every receipt will go
+        // back to their account
+        let mut server = Server::new();
+        let mut client = Client::new(1);
+
+        let client_data = client.register_with_server();
+        server.register_user(client_data.0, client_data.1);
+        let server_data = server.share_state();
+        client.update_state(0, server_data.0, server_data.1);
+
+        // Process n_txs transactions
+        for i in 0..n_txs {
+            let com = client.process_tx_hello();
+            let i_s = server.process_tx_hello_response(com, 0);
+            let i_c_r = client.process_tx_compute_id(i_s, com);
+            let i_c = i_c_r.0;
+            let r = i_c_r.1;
+
+            let out = server.process_tx_barcode_gen(i_c, r, com);
+            let uid_b = out.0;
+            let barcode = out.1;
+            let pk_b = out.2;
+            let pi_merkle = out.3;
+
+            let out = client.process_tx(&pi_merkle, barcode, n_points.try_into().unwrap(), pk_b, com);
+            let m_ct = out.0;
+            let pi_tx = out.1;
+
+            let sigma = server.process_tx(m_ct, pi_tx, com);
+            client.process_tx_coda(sigma, com);
+        }
+
+        // Distribute receipts
+        let now = Instant::now();
+        let rcts = server.send_receipts(0);
+        let time_server = now.elapsed();
+
+        let now = Instant::now();
+        client.process_receipts(rcts);
+        let time_client = now.elapsed();
+
+        println!("{} Client: {:.2?}, Server: {:.2?}", n_points, time_client, time_server);
+    }
+
     println!("------------------------");
     println!("--- Balance Settling ---");
     println!("------------------------");
     // Scales with number of transactions.
     // Process with varying the number of transactions
+
+    let min_txs = 50;
+    let max_txs = 500;
+    let step = min_txs;
+
+    for n_txs in (min_txs..max_txs).step_by(step) {
+        // Only initialize one client, so every receipt will go
+        // back to their account
+        let mut server = Server::new();
+        let mut client = Client::new(1);
+
+        let client_data = client.register_with_server();
+        server.register_user(client_data.0, client_data.1);
+        let server_data = server.share_state();
+        client.update_state(0, server_data.0, server_data.1);
+
+        // Process n_txs transactions
+        for i in 0..n_txs {
+            let com = client.process_tx_hello();
+            let i_s = server.process_tx_hello_response(com, 0);
+            let i_c_r = client.process_tx_compute_id(i_s, com);
+            let i_c = i_c_r.0;
+            let r = i_c_r.1;
+
+            let out = server.process_tx_barcode_gen(i_c, r, com);
+            let uid_b = out.0;
+            let barcode = out.1;
+            let pk_b = out.2;
+            let pi_merkle = out.3;
+
+            let n_points: i32 = rand::thread_rng().gen_range(0..300).try_into().unwrap();
+            let out = client.process_tx(&pi_merkle, barcode, n_points, pk_b, com);
+            let m_ct = out.0;
+            let pi_tx = out.1;
+
+            let sigma = server.process_tx(m_ct, pi_tx, com);
+            client.process_tx_coda(sigma, com);
+        }
+
+        // Distribute receipts
+        let rcts = server.send_receipts(0);
+        client.process_receipts(rcts);
+
+        // Settle balances
+        let now = Instant::now();
+        let out = client.settle_balance();
+        let time_client = now.elapsed();
+        // println!("{:?} {:?} {:?}", out.0, out.1, out.2);
+
+        let now = Instant::now();
+        let test = server.settle_balance(0, out.0, out.1, out.2, out.3);
+        let time_server = now.elapsed();
+        
+        assert!(test);
+        println!("{} Client: {:.2?}, Server: {:.2?}", n_txs, time_client, time_server);
+    }
 }
