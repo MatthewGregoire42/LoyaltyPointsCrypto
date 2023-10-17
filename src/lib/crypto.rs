@@ -5,6 +5,7 @@ use curve25519_dalek::ristretto::{RistrettoPoint, RistrettoBasepointTable, Compr
 use curve25519_dalek::scalar::Scalar;
 use sha2::{Sha256, Sha512, Digest};
 use curve25519_dalek::digest::Update;
+use curve25519_dalek::traits::Identity;
 use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit},
@@ -318,8 +319,6 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>, gs: &Vec:
     let h = h_point();
     let u = u_point();
 
-    println!("Client bal: {:?}", bal);
-
     // Auxilliary scalars for nonlinear proofs
     let mut aas = Vec::<Scalar>::with_capacity(n);  // 'as' is a Rust keyword
     let mut ys = Vec::<Scalar>::with_capacity(n);
@@ -373,7 +372,7 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>, gs: &Vec:
     let mut xt_sum = Scalar::zero();
     for i in 0..n {
         xt_sum = xt_sum + x_ts[i];
-        b2_t = b2_t + gs[i] * &aas[i];
+        b2_t = b2_t + gs[i] * &a_ts[i];
     }
 
     let b1_t = &xt_sum * G;
@@ -406,13 +405,6 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>, gs: &Vec:
         t_zs.push(t_ts[i] + ts[i]*c);
     }
 
-    let mut a_sum = Scalar::zero();
-    let mut az_sum = Scalar::zero();
-    for i in 0..n {
-        a_sum = a_sum + aas[i];
-        az_sum = az_sum + a_zs[i];
-    }
-
     SettleProof {
         vs: vs,
         es: es,
@@ -438,7 +430,6 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>, gs: &Vec:
 pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, gs: Vec<Point>, pi: SettleProof) -> bool {
     let n = b_ms.len();
     let b1 = &int_to_scalar(x)*G;
-    println!("Server bal: {:?}", bal);
     let b2 = bal;
     let u = u_point();
 
@@ -466,8 +457,6 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, gs: Vec<Poi
     let check_b1 = &xz_sum * G == pi.b1_t + (&c * b1);
     let check_b2 = b2_left == pi.b2_t + (&c * b2);
 
-    println!("{} {}", check_b1, check_b2);
-
     let mut result = check_b1 && check_b2;
     for i in 0..n {
         let b_m = b_ms[i];
@@ -493,8 +482,6 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, gs: Vec<Poi
         let check3 = &y_z*u + &m_z*g == e_t + (&c*e);
         let check4 = &t_z*g == vx_t + (&c*vx);
         let check5 = &t_z*u + &a_z*g == ex_t + (&c*ex);
-
-        println!("{} {} {} {} {}", check1, check2, check3, check4, check5);
 
         result = result && check1 && check2 && check3 && check4 && check5;
         if !result {

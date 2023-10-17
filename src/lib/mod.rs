@@ -180,7 +180,7 @@ impl Server {
         
         let hm = tx.r2.clone();
         let gmx = tx.r3.clone(); // base^mx
-
+        
         // Update both users' balances
         let bal_s = puzip(self.users[&uid_s].balance);
         self.users.get_mut(&uid_s).unwrap().balance = pzip(bal_s + gmx);
