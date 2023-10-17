@@ -3,8 +3,8 @@ use lib::*;
 use std::vec::Vec;
 use rand::Rng;
 use std::time::{Instant, Duration};
-use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use rs_merkle::{algorithms, MerkleProof};
+use ed25519_dalek::Signature;
 
 const N_CLIENTS: usize = 1000;
 
@@ -18,7 +18,7 @@ fn main() {
     println!("---------------------------");
 
     let now = Instant::now();
-    for i in 0..N_CLIENTS {
+    for _i in 0..N_CLIENTS {
         let barcode: u64 = rand::random();
         let c = Client::new(barcode);
 
@@ -62,8 +62,8 @@ fn main() {
     // let min_users = 1000;
     // let max_users = 10000;
     let n_txs = 10;
-    let min_users = 10;
-    let max_users = 10;
+    let min_users = 5;
+    let max_users = 5;
     let step = min_users;
 
     let mut server = Server::new();
@@ -77,9 +77,9 @@ fn main() {
         let mut time_server = Duration::ZERO;
 
         // Initialise another <step> clients and register with server
-        for i in 0..step {
+        for _i in 0..step {
             let barcode: u64 = rand::random();
-            let mut c = Client::new(barcode);
+            let c = Client::new(barcode);
             clients.push(c);
 
             let client_data = clients.last_mut().unwrap().register_with_server();
@@ -94,7 +94,7 @@ fn main() {
 
         // Process transactions
         let mut txs = Vec::<Tx>::with_capacity(n_txs);
-        for i in 0..n_txs {
+        for _i in 0..n_txs {
             let shopper_uid: u32 = rand::thread_rng().gen_range(0..n_users).try_into().unwrap();
             let points_used: i32 = rand::thread_rng().gen_range(0..300).try_into().unwrap();
             txs.push(Tx {
@@ -138,7 +138,7 @@ fn main() {
         for mut tx in &mut txs {
             let i_s = tx.i_s.unwrap();
             let com = tx.com.unwrap();
-            let mut shopper = &mut clients[tx.uid_s as usize];
+            let shopper = &mut clients[tx.uid_s as usize];
             let i_c_r = shopper.process_tx_compute_id(i_s, com);
             tx.i_c = Some(i_c_r.0);
             tx.r = Some(i_c_r.1);
@@ -195,7 +195,7 @@ fn main() {
 
         // -----------------------------
         let now = Instant::now();
-        for mut tx in &mut txs {
+        for tx in &txs {
             let shopper: &mut Client = &mut clients[tx.uid_s as usize];
             let com = tx.com.unwrap();
             let sigma = tx.sigma.unwrap();
@@ -234,7 +234,7 @@ fn main() {
         client.update_state(0, server_data.0, server_data.1);
 
         // Process n_txs transactions
-        for i in 0..n_txs {
+        for _i in 0..n_txs {
             let com = client.process_tx_hello();
             let i_s = server.process_tx_hello_response(com, 0);
             let i_c_r = client.process_tx_compute_id(i_s, com);
@@ -242,7 +242,6 @@ fn main() {
             let r = i_c_r.1;
 
             let out = server.process_tx_barcode_gen(i_c, r, com);
-            let uid_b = out.0;
             let barcode = out.1;
             let pk_b = out.2;
             let pi_merkle = out.3;
@@ -289,7 +288,7 @@ fn main() {
         client.update_state(0, server_data.0, server_data.1);
 
         // Process n_txs transactions
-        for i in 0..n_txs {
+        for _i in 0..n_txs {
             let com = client.process_tx_hello();
             let i_s = server.process_tx_hello_response(com, 0);
             let i_c_r = client.process_tx_compute_id(i_s, com);
@@ -297,7 +296,6 @@ fn main() {
             let r = i_c_r.1;
 
             let out = server.process_tx_barcode_gen(i_c, r, com);
-            let uid_b = out.0;
             let barcode = out.1;
             let pk_b = out.2;
             let pi_merkle = out.3;

@@ -14,7 +14,7 @@ use aes_gcm::{
 use generic_array::typenum::U12;
 use generic_array;
 
-const MAX_POINTS: i32 = 100000;
+const MAX_POINTS: u32 = 100000;
 
 pub(crate) const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
 
@@ -35,14 +35,6 @@ pub(crate) fn pzip(p: Point) -> [u8; 32] {
 
 pub(crate) fn puzip(p: [u8; 32]) -> Point {
     CompressedRistretto::from_slice(&p).decompress().unwrap()
-}
-
-pub(crate) fn szip(s: Scalar) -> [u8; 32] {
-    s.to_bytes()
-}
-
-pub(crate) fn suzip(s: [u8; 32]) -> Scalar {
-    Scalar::from_bytes_mod_order(s)
 }
 
 pub(crate) fn elgamal_keygen() -> (Scalar, Point) {
@@ -113,17 +105,14 @@ pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
     // create lookup table for small powers of the base.
     let mut table = HashMap::new();
 
-    println!("Computing table");
     let m = (MAX_POINTS as f32).sqrt() as i32 + 1;
     for i in 0..m {
         let k = pzip(&int_to_scalar(i)*g);
         table.insert(k, i);
     }
-    println!("Table done");
 
     let mut res: Option<i32> = None;
     let gm_inv = &int_to_scalar(-1*m)*g;
-    println!("Searching");
     let mut gamma = gx.clone();
     for i in 0..m {
         let k = pzip(gamma);
@@ -133,7 +122,6 @@ pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
         }
         gamma = gamma + gm_inv;
     }
-    println!("Done searching");
 
     match res {
         Some(x) => x,
@@ -152,16 +140,12 @@ pub(crate) fn dlog_brute_force(g: Point, gx: Point) -> i32 {
             break m as i32;
         } else if &(Scalar::zero() - Scalar::from(m)) * G == gx {
             break -1 * (m as i32);
-        } else if m > 1000000 {
+        } else if m > MAX_POINTS {
             panic!("Looping too long");
         } {
             m += 1;
         }
     }
-}
-
-pub(crate) fn add_ciphertexts(ct0: Ciphertext, ct1: Ciphertext) -> Ciphertext {
-    ((ct0.0 + ct1.0), (ct0.1 + ct1.1))
 }
 
 pub(crate) fn int_to_scalar(m: i32) -> Scalar {
@@ -402,24 +386,12 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
         t_zs.push(t_ts[i] + ts[i]*c);
     }
 
-    let mut x_sum = Scalar::zero();
-    let mut xz_sum = Scalar::zero();
+    let mut a_sum = Scalar::zero();
+    let mut az_sum = Scalar::zero();
     for i in 0..n {
-        x_sum = x_sum + xs[i];
-        xz_sum = xz_sum + x_zs[i];
+        a_sum = a_sum + aas[i];
+        az_sum = az_sum + a_zs[i];
     }
-    println!("Client xz_sum: {:?}", xz_sum);
-    // println!("Client b1_t + &(x_sum*c): {:?}", b1_t + &(x_sum*c)*G);
-
-    let ps = xz_sum;
-    let qs = x_sum*c + xt_sum;
-    // println!("{:?} {:?} {}", ps, qs, ps == qs);
-    let q = &(xz_sum)*G;
-    let qprime = b1_t + &(int_to_scalar(x)*c)*G;
-
-    println!("-------");
-    println!("{} {}", q == qprime, qprime == &(x_sum*c)*G + b1_t);
-    println!("-------");
 
     SettleProof {
         vs: vs,
@@ -445,7 +417,6 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
 
 pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleProof) -> bool {
     let n = b_ms.len();
-    println!("{}", x);
     let b1 = &int_to_scalar(x)*G;
     let b2 = bal;
     let u = u_point();
@@ -470,14 +441,11 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
         az_sum = az_sum + pi.a_zs[i];
         xz_sum = xz_sum + pi.x_zs[i];
     }
-    println!("Server xz_sum: {:?}", xz_sum);
-    // println!("Server b1_t + &(x_sum*c)*G: {:?}", pi.b1_t + &(int_to_scalar(x)*c)*G);
 
     let check_b1 = &xz_sum * G == pi.b1_t + (&c * b1);
     let check_b2 = &az_sum * G == pi.b2_t + (&c * b2);
 
     let mut result = check_b1 && check_b2;
-    println!("{} {}", check_b1, check_b2);
     for i in 0..n {
         let b_m = b_ms[i];
         let v = pi.vs[i];
@@ -501,8 +469,6 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
         let check3 = &y_z*u + &m_z*G == e_t + (&c*e);
         let check4 = &t_z*G == vx_t + (&c*vx);
         let check5 = &t_z*u + &a_z*G == ex_t + (&c*ex);
-
-        println!("{} {} {} {} {}", check1, check2, check3, check4, check5);
 
         result = result && check1 && check2 && check3 && check4 && check5;
         if !result {

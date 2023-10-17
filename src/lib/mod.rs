@@ -79,7 +79,7 @@ impl Server {
     pub(crate) fn register_user(&mut self, barcode: u64, pk_enc: CPoint) {
         let user_rec = UserRecord {
             barcode: barcode,
-            balance: self.default_bal,
+            balance: self.default_bal.clone(),
             pk_enc: pk_enc};
         let leaf = TreeEntry {
             uid: self.num_users,
@@ -174,9 +174,10 @@ impl Server {
 
         // Update both users' balances
         let bal_s = puzip(self.users[&uid_s].balance);
-        let bal_b = puzip(self.users[&uid_b].balance);
         self.users.get_mut(&uid_s).unwrap().balance = pzip(bal_s + gmx);
-        self.users.get_mut(&uid_b).unwrap().balance = pzip(bal_b + gmx*&crypto::int_to_scalar(-1));
+
+        let bal_b = puzip(self.users[&uid_b].balance);
+        self.users.get_mut(&uid_b).unwrap().balance = pzip(bal_b + gmx * &crypto::int_to_scalar(-1));
         
         // Store the receipt to send to the barcode owner
         let rct  = (ct, tx);
@@ -195,9 +196,8 @@ impl Server {
 
         // Unpack h^m, and sign (h^m)^-1 = h^-m
         for rct in &*rcts {
-            let hm = rct.1.r2.clone();
-            let hm_inv = hm*(&crypto::int_to_scalar(-1));
-            let sigma = crypto::sign(&self.sk, &hm_inv);
+            let hm = rct.1.r2;
+            let sigma = crypto::sign(&self.sk, &hm);
 
             out.push((rct.clone(), sigma));
         }
@@ -210,6 +210,8 @@ impl Server {
     pub(crate) fn settle_balance(&self, uid: u32, x: i32, hms: Vec<Point>, sigmas: Vec<Signature>, pi: SettleProof) -> bool {
         let server_bal = crypto::puzip(self.users[&uid].balance);
 
+        assert!(server_bal == crypto::G * &crypto::int_to_scalar(0));
+
         // Issue is with verifying signatures
         for i in 0..sigmas.len() {
             let hm = &hms[i];
@@ -220,7 +222,6 @@ impl Server {
             }
         }
 
-        println!("settling");
         crypto::zk_settle_verify(x, server_bal, hms, pi)
     }
 }
@@ -359,6 +360,8 @@ impl Client {
         let hm = h_point()*&m;
         let gmx = crypto::G*&(m * x);
 
+        self.server_bal += gmx;
+
         // Prove that (h^m, g^mx) is well-formed
         let pi = crypto::zk_tx_prove(hm, gmx, m, x);
 
@@ -412,7 +415,7 @@ impl Client {
 
             self.bal -= x;
             self.server_bal = self.server_bal + (gmx * crypto::int_to_scalar(-1));
-            self.receipts.push((x_scalar*crypto::int_to_scalar(-1), m * crypto::int_to_scalar(-1), hm * crypto::int_to_scalar(-1), rct.1));
+            self.receipts.push((x_scalar*crypto::int_to_scalar(-1), m, hm, rct.1));
         }
     }
 
@@ -446,7 +449,6 @@ impl Client {
             hms.push(hm);
             signatures.push(sigma);
         }
-        // println!("{:?}", &ms);
 
         let pi = crypto::zk_settle_prove(x, server_bal, &hms, &xs, &ms);
 
