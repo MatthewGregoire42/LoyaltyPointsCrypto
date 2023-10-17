@@ -1,4 +1,5 @@
 mod lib;
+mod lib_old;
 use lib::*;
 use std::vec::Vec;
 use rand::Rng;
@@ -12,6 +13,9 @@ fn main() {
     let mut server = Server::new();
     
     let mut clients = Vec::<Client>::with_capacity(N_CLIENTS);
+
+    println!("Full protocol");
+    println!("");
 
     println!("---------------------------");
     println!("--- Client Registration ---");
@@ -36,7 +40,10 @@ fn main() {
     }
     let time_server = now.elapsed();
 
-    println!("Client: {:.2?}, Server: {:.2?}", time_client, time_server);
+    let res = format!("{: <10} {: <10.3?} {: <10} {: <10.3?}",
+        "Client:", time_client.div_f32(N_CLIENTS as f32),
+        "Server:", time_server.div_f32(N_CLIENTS as f32));
+    println!("{}", res);
 
     println!("------------------------------");
     println!("--- Transaction Processing ---");
@@ -116,7 +123,7 @@ fn main() {
 
         // -----------------------------
         let now = Instant::now();
-        for mut tx in &mut txs {
+        for tx in &mut txs {
             let shopper: &mut Client = &mut clients[tx.uid_s as usize];
             let com = shopper.process_tx_hello();
             tx.com = Some(com);
@@ -126,7 +133,7 @@ fn main() {
 
         // -----------------------------
         let now = Instant::now();
-        for mut tx in &mut txs {
+        for tx in &mut txs {
             let i_s = server.process_tx_hello_response(tx.com.unwrap(), tx.uid_s);
             tx.i_s = Some(i_s);
         }
@@ -135,7 +142,7 @@ fn main() {
 
         // -----------------------------
         let now = Instant::now();
-        for mut tx in &mut txs {
+        for tx in &mut txs {
             let i_s = tx.i_s.unwrap();
             let com = tx.com.unwrap();
             let shopper = &mut clients[tx.uid_s as usize];
@@ -148,7 +155,7 @@ fn main() {
 
         // -----------------------------
         let now = Instant::now();
-        for mut tx in &mut txs {
+        for tx in &mut txs {
             let i_c = tx.i_c.unwrap();
             let r = tx.r.unwrap();
             let com = tx.com.unwrap();
@@ -164,7 +171,7 @@ fn main() {
 
         // -----------------------------
         let now = Instant::now();
-        for mut tx in &mut txs {
+        for tx in &mut txs {
             let shopper: &mut Client = &mut clients[tx.uid_s as usize];
             
             let pi_merkle = tx.pi_merkle.as_ref().unwrap();
@@ -182,7 +189,7 @@ fn main() {
 
         // -----------------------------
         let now = Instant::now();
-        for mut tx in &mut txs {
+        for tx in &mut txs {
             let m_ct = tx.m_ct.clone().unwrap();
             let pi_tx = tx.pi_tx.clone().unwrap();
             let com = tx.com.unwrap();
@@ -205,7 +212,10 @@ fn main() {
         time_client += now.elapsed();
         // -----------------------------
 
-        println!("{} Client: {:.2?}, Server: {:.2?}", n_users, time_client, time_server);
+        let res = format!("{: <10} {: <10.3?} {: <10} {: <10.3?}",
+            "Client:", time_client.div_f32(N_CLIENTS as f32),
+            "Server:", time_server.div_f32(N_CLIENTS as f32));
+        println!("{}", res);
     }
 
     println!("----------------------------");
@@ -263,7 +273,11 @@ fn main() {
         client.process_receipts(rcts);
         let time_client = now.elapsed();
 
-        println!("{} Client: {:.2?}, Server: {:.2?}", n_points, time_client, time_server);
+        let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+            n_points,
+            "Client:", time_client.div_f32(N_CLIENTS as f32),
+            "Server:", time_server.div_f32(N_CLIENTS as f32));
+        println!("{}", res);
     }
 
     println!("------------------------");
@@ -324,6 +338,16 @@ fn main() {
         let time_server = now.elapsed();
         
         assert!(test);
-        println!("{} Client: {:.2?}, Server: {:.2?}", n_txs, time_client, time_server);
+        
+        let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+            n_txs,
+            "Client:", time_client.div_f32(N_CLIENTS as f32),
+            "Server:", time_server.div_f32(N_CLIENTS as f32));
+        println!("{}", res);
     }
+
+    println!("Semihonest protocol");
+    println!("");
+
+    
 }

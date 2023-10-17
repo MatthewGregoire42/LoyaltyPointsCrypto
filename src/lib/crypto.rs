@@ -13,10 +13,27 @@ use aes_gcm::{
 };
 use generic_array::typenum::U12;
 use generic_array;
+use lazy_static::lazy_static;
 
 const MAX_POINTS: u32 = 100000;
 
 pub(crate) const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
+
+fn create_dlog_table() -> HashMap<[u8; 32], i32> {
+    let mut table = HashMap::new();
+
+    let m = (MAX_POINTS as f32).sqrt() as i32 + 1;
+    for i in 0..m {
+        let k = pzip(&int_to_scalar(i)*G);
+        table.insert(k, i);
+    }
+
+    table
+}
+
+lazy_static! {
+    static ref DLOG_TABLE: HashMap<[u8; 32], i32> = create_dlog_table();
+}
 
 type Point = RistrettoPoint;
 type Ciphertext = (Point, Point);
@@ -101,23 +118,16 @@ pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) 
 // two values (when the discrete log is small). This is only ever used to unmask a
 // number of loyalty points which, by construction of our scheme, is always
 // positive, so we limit our search space to (0, max points).
-pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
-    // create lookup table for small powers of the base.
-    let mut table = HashMap::new();
-
+pub(crate) fn dlog_base_g(gx: Point) -> i32 {
     let m = (MAX_POINTS as f32).sqrt() as i32 + 1;
-    for i in 0..m {
-        let k = pzip(&int_to_scalar(i)*g);
-        table.insert(k, i);
-    }
 
     let mut res: Option<i32> = None;
-    let gm_inv = &int_to_scalar(-1*m)*g;
+    let gm_inv = &int_to_scalar(-1*m)*G;
     let mut gamma = gx.clone();
     for i in 0..m {
         let k = pzip(gamma);
-        if table.contains_key(&k) {
-            res = Some(i*m + table[&k]);
+        if DLOG_TABLE.contains_key(&k) {
+            res = Some(i*m + DLOG_TABLE[&k]);
             break;
         }
         gamma = gamma + gm_inv;
@@ -129,7 +139,7 @@ pub(crate) fn dlog(g: Point, gx: Point) -> i32 {
     }
 }
 
-// Brute force DL decryption
+/* // Brute force DL decryption
 // The result of ElGamal decryption (mg) is the value m*g. Assuming m is a small scalar,
 // we can extract it by guessing and checking different values until we find an m
 // such that mg = m*g.
@@ -146,7 +156,7 @@ pub(crate) fn dlog_brute_force(g: Point, gx: Point) -> i32 {
             m += 1;
         }
     }
-}
+} */
 
 pub(crate) fn int_to_scalar(m: i32) -> Scalar {
     let m_pos: u32 = m.abs() as u32;

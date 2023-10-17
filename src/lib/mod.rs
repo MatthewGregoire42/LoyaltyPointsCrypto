@@ -406,7 +406,10 @@ impl Client {
             }
             self.seen_ms.insert(m_bits);
 
-            let x = crypto::dlog_brute_force(crypto::G * &m, gmx);
+            let m_inv = m.invert();
+            let gx = gmx * &m_inv;
+
+            let x = crypto::dlog_base_g(gx);
             let x_scalar = crypto::int_to_scalar(x);
 
             // No need to compute the entire ZK proof.
