@@ -1,5 +1,5 @@
 mod lib;
-mod lib_old;
+mod lib_sh;
 use lib::*;
 use std::vec::Vec;
 use rand::Rng;
@@ -350,13 +350,13 @@ fn main() {
     println!("--- Client Registration ---");
     println!("---------------------------");
 
-    let mut server = lib_old::Server::new();
-    let mut clients = Vec::<lib_old::Client>::with_capacity(N_CLIENTS);
+    let mut server = lib_sh::Server::new();
+    let mut clients = Vec::<lib_sh::Client>::with_capacity(N_CLIENTS);
 
     let now = Instant::now();
     for _i in 0..N_CLIENTS {
         let barcode: u64 = rand::random();
-        let c = lib_old::Client::new(barcode);
+        let c = lib_sh::Client::new(barcode);
 
         clients.push(c);
     }
@@ -390,11 +390,11 @@ fn main() {
         r: Option<[u8; 32]>,
         uid_b: Option<u32>,
         barcode: Option<u64>,
-        pk_b: Option<lib_old::Key>,
+        pk_b: Option<lib_sh::Key>,
         pi_merkle: Option<MerkleProof<algorithms::Sha256>>,
-        cts: Option<lib_old::Ciphertext>,
-        ctb: Option<lib_old::Ciphertext>,
-        pi_tx: Option<lib_old::crypto_sh::CompressedCtEqProof>
+        cts: Option<lib_sh::Ciphertext>,
+        ctb: Option<lib_sh::Ciphertext>,
+        pi_tx: Option<lib_sh::crypto_sh::CompressedCtEqProof>
     }
 
     // let n_txs = 500;
@@ -405,8 +405,8 @@ fn main() {
     let max_users = 10;
     let step = min_users;
 
-    let mut server = lib_old::Server::new();
-    let mut clients = Vec::<lib_old::Client>::with_capacity(max_users);
+    let mut server = lib_sh::Server::new();
+    let mut clients = Vec::<lib_sh::Client>::with_capacity(max_users);
 
     // let now = Instant::now();
     // Initialize a system with a certain number of users,
@@ -418,7 +418,7 @@ fn main() {
         // Initialise another <step> clients and register with server
         for _i in 0..step {
             let barcode: u64 = rand::random();
-            let c = lib_old::Client::new(barcode);
+            let c = lib_sh::Client::new(barcode);
             clients.push(c);
 
             let client_data = clients.last_mut().unwrap().register_with_server();
@@ -456,7 +456,7 @@ fn main() {
         // -----------------------------
         let now = Instant::now();
         for tx in &mut txs {
-            let shopper: &mut lib_old::Client = &mut clients[tx.uid_s as usize];
+            let shopper: &mut lib_sh::Client = &mut clients[tx.uid_s as usize];
             let com = shopper.process_tx_hello();
             tx.com = Some(com);
         }
@@ -504,7 +504,7 @@ fn main() {
         // -----------------------------
         let now = Instant::now();
         for tx in &mut txs {
-            let shopper: &mut lib_old::Client = &mut clients[tx.uid_s as usize];
+            let shopper: &mut lib_sh::Client = &mut clients[tx.uid_s as usize];
             
             let pi_merkle = tx.pi_merkle.as_ref().unwrap();
             let barcode = tx.barcode.unwrap();
@@ -556,8 +556,8 @@ fn main() {
     for n_points in (min_points..(max_points+1)).step_by(step) {
         // Only initialize one client, so every receipt will go
         // back to their account
-        let mut server = lib_old::Server::new();
-        let mut client = lib_old::Client::new(1);
+        let mut server = lib_sh::Server::new();
+        let mut client = lib_sh::Client::new(1);
 
         let client_data = client.register_with_server();
         server.register_user(client_data.0, client_data.1);
@@ -565,13 +565,13 @@ fn main() {
         client.update_state(server_data.0, server_data.1);
 
         // Insert the correct number of points into the client's account
-        let ct = lib_old::crypto_sh::elgamal_enc(client.pk_enc, n_points);
-        server.users.get_mut(&0).unwrap().balance = lib_old::crypto_sh::add_ciphertexts(
+        let ct = lib_sh::crypto_sh::elgamal_enc(client.pk_enc, n_points);
+        server.users.get_mut(&0).unwrap().balance = lib_sh::crypto_sh::add_ciphertexts(
             server.users[&0u32].balance, (ct.0, ct.1)
         );
         let balance = server.settle_balance_hello(0);
 
-        let mut proofs = Vec::<lib_old::crypto_sh::CompressedCtDecProof>::with_capacity(n_settles);
+        let mut proofs = Vec::<lib_sh::crypto_sh::CompressedCtDecProof>::with_capacity(n_settles);
 
         let mut time_client = Duration::ZERO;
         let mut time_server = Duration::ZERO;
