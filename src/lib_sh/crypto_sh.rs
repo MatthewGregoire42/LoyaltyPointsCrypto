@@ -6,8 +6,28 @@ use curve25519_dalek::ristretto::RistrettoBasepointTable;
 use curve25519_dalek::scalar::Scalar;
 use sha2::Sha512;
 use curve25519_dalek::digest::Update;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 
 const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
+
+const MAX_POINTS: u32 = 100000;
+
+fn create_dlog_table() -> HashMap<[u8; 32], i32> {
+    let mut table = HashMap::new();
+
+    let m = (MAX_POINTS as f32).sqrt() as i32 + 1;
+    for i in 0..m {
+        let k = pzip(&int_to_scalar(i)*G);
+        table.insert(k, i);
+    }
+
+    table
+}
+
+lazy_static! {
+    static ref DLOG_TABLE: HashMap<[u8; 32], i32> = create_dlog_table();
+}
 
 fn pzip(p: RistrettoPoint) -> [u8; 32] {
     p.compress().to_bytes()
@@ -56,6 +76,31 @@ pub(crate) fn elgamal_enc(pk: [u8; 32], m: i32) -> ([u8; 32], [u8; 32], [u8; 32]
     (pzip(c1), pzip(c2), szip(y))
 }
 
+// Use the baby-step giant-step algorithm to compute the discrete log between
+// two values (when the discrete log is small). This is only ever used to unmask a
+// number of loyalty points which, by construction of our scheme, is always
+// positive, so we limit our search space to (0, max points).
+pub(crate) fn dlog_base_g(gx: RistrettoPoint) -> i32 {
+    let m = (MAX_POINTS as f32).sqrt() as i32 + 1;
+
+    let mut res: Option<i32> = None;
+    let gm_inv = &int_to_scalar(-1*m)*G;
+    let mut gamma = gx.clone();
+    for i in 0..m {
+        let k = pzip(gamma);
+        if DLOG_TABLE.contains_key(&k) {
+            res = Some(i*m + DLOG_TABLE[&k]);
+            break;
+        }
+        gamma = gamma + gm_inv;
+    }
+
+    match res {
+        Some(x) => x,
+        None => panic!("Number of points out of bounds")
+    }
+}
+
 // Takes as parameters:
 //      sk: a compressed Scala
 //      ct:  a compressed (RistrettoPoint, RistrettoPoint) ciphertext
@@ -66,21 +111,7 @@ pub(crate) fn elgamal_dec(sk: [u8; 32], ct: ([u8; 32], [u8; 32])) -> i32 {
     let ct1 = puzip(ct.1);
     let mg = ct1 + (Scalar::zero() - sk) * ct0;
 
-    // The result of ElGamal decryption (mg) is the value m*g. Assuming m is a small scalar,
-    // we can extract it by guessing and checking different values until we find an m
-    // such that mg = m*g.
-    let mut m: u32 = 0;
-    loop {
-        if &Scalar::from(m) * G == mg {
-            break m as i32;
-        } else if &(Scalar::zero() - Scalar::from(m)) * G == mg {
-            break -1 * (m as i32);
-        } else if m > 1000000 {
-            panic!("Looping too long");
-        } {
-            m += 1;
-        }
-    }
+    dlog_base_g(mg)
 }
 
 pub(crate) fn add_ciphertexts(ct0: ([u8; 32], [u8; 32]), ct1: ([u8; 32], [u8; 32])) -> ([u8; 32], [u8; 32]) {

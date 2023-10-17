@@ -1,6 +1,5 @@
 use rand_core::OsRng;
 use rand::rngs;
-use std::collections::HashMap;
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::{RistrettoPoint, RistrettoBasepointTable, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
@@ -13,13 +12,12 @@ use aes_gcm::{
 };
 use generic_array::typenum::U12;
 use generic_array;
-use lazy_static::lazy_static;
 
-const MAX_POINTS: u32 = 100000;
+// const MAX_POINTS: u32 = 100000;
 
 pub(crate) const G: &RistrettoBasepointTable = &constants::RISTRETTO_BASEPOINT_TABLE;
 
-fn create_dlog_table() -> HashMap<[u8; 32], i32> {
+/* fn create_dlog_table() -> HashMap<[u8; 32], i32> {
     let mut table = HashMap::new();
 
     let m = (MAX_POINTS as f32).sqrt() as i32 + 1;
@@ -33,7 +31,7 @@ fn create_dlog_table() -> HashMap<[u8; 32], i32> {
 
 lazy_static! {
     static ref DLOG_TABLE: HashMap<[u8; 32], i32> = create_dlog_table();
-}
+} */
 
 type Point = RistrettoPoint;
 type Ciphertext = (Point, Point);
@@ -505,10 +503,22 @@ pub(crate) fn signature_keygen() -> (SigningKey, VerifyingKey) {
     (sk, vk)
 }
 
-pub(crate) fn sign(sk: &SigningKey, p: &Point) -> Signature {
-    (*sk).sign(&pzip(*p))
+pub(crate) fn sign(sk: &SigningKey, p: &Point, uid: u32) -> Signature {
+
+    let uid_bytes: [u8; 4] = uid.to_be_bytes();
+    let mut to_sign: [u8; 36] = [0; 36];
+    to_sign[..32].copy_from_slice(&pzip(*p));
+    to_sign[32..].copy_from_slice(&uid_bytes);
+
+    (*sk).sign(&to_sign)
 }
 
-pub(crate) fn verify(vk: VerifyingKey, p: &Point, s: Signature) -> bool {
-    vk.verify(&pzip(*p), &s).is_ok()
+pub(crate) fn verify(vk: VerifyingKey, p: &Point, uid: u32, s: Signature) -> bool {
+
+    let uid_bytes: [u8; 4] = uid.to_be_bytes();
+    let mut to_verify: [u8; 36] = [0; 36];
+    to_verify[..32].copy_from_slice(&pzip(*p));
+    to_verify[32..].copy_from_slice(&uid_bytes);
+
+    vk.verify(&to_verify, &s).is_ok()
 }

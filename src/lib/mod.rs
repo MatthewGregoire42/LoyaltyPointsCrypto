@@ -185,7 +185,7 @@ impl Server {
         rcts.push(rct);
 
         // Sign and return h^m
-        crypto::sign(&self.sk, &hm)
+        crypto::sign(&self.sk, &hm, tmp.uid_s)
     }
 
     // Receipt distribution
@@ -197,7 +197,7 @@ impl Server {
         // Unpack h^m, and sign (h^m)^-1 = h^-m
         for rct in &*rcts {
             let hm = rct.1.r2;
-            let sigma = crypto::sign(&self.sk, &hm);
+            let sigma = crypto::sign(&self.sk, &hm, uid);
 
             out.push((rct.clone(), sigma));
         }
@@ -217,7 +217,7 @@ impl Server {
             let hm = &hms[i];
             let s = sigmas[i];
 
-            if !crypto::verify(self.vk, hm, s) {
+            if !crypto::verify(self.vk, hm, uid, s) {
                 return false;
             }
         }
