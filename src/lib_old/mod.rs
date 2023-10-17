@@ -1,4 +1,4 @@
-mod crypto_old;
+pub(crate) mod crypto_sh;
 use rs_merkle::{MerkleTree, algorithms, Hasher, MerkleProof};
 use std::collections::HashMap;
 use std::vec::Vec;
@@ -6,13 +6,13 @@ use serde_derive::Serialize;
 use rand::Rng;
 use sha2::{Sha256, Digest};
 
-type Com = [u8; 32];
-type Ciphertext = ([u8; 32], [u8; 32]);
-type Key = [u8; 32];
+pub(crate) type Com = [u8; 32];
+pub(crate) type Ciphertext = ([u8; 32], [u8; 32]);
+pub(crate) type Key = [u8; 32];
 
-struct Server {
+pub(crate) struct Server {
     num_users: u32, 
-    users: HashMap<u32, UserRecord>,
+    pub users: HashMap<u32, UserRecord>,
     merkle_tree: MerkleTree<algorithms::Sha256>,
     tmp: HashMap<Com, ServerTxTmp>,
 }
@@ -24,9 +24,9 @@ struct ServerTxTmp {
 
 // The server's record of a user in the system
 #[derive(Debug, Serialize, Clone)]
-struct UserRecord {
+pub struct UserRecord {
     barcode: u64,
-    balance: Ciphertext,
+    pub balance: Ciphertext,
     pk_enc: Key
 }
 
@@ -45,7 +45,7 @@ impl TreeEntry {
 }
 
 impl Server {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Server {
             num_users: 0,
             users: HashMap::new(),
@@ -54,8 +54,8 @@ impl Server {
         }
     }
 
-    fn register_user(&mut self, barcode: u64, pk_enc: Key) {
-        let ct = &crypto_old::elgamal_enc(pk_enc, 0);
+    pub(crate) fn register_user(&mut self, barcode: u64, pk_enc: Key) {
+        let ct = &crypto_sh::elgamal_enc(pk_enc, 0);
         let init_balance = (ct.0, ct.1);
 
         let user_rec = UserRecord {
@@ -79,7 +79,7 @@ impl Server {
         self.num_users += 1;
     }
 
-    fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash) {
+    pub(crate) fn share_state(&self) -> (u32, <algorithms::Sha256 as rs_merkle::Hasher>::Hash) {
         let root = self.merkle_tree.root().unwrap();
         return (self.num_users, root);
     }
@@ -88,7 +88,7 @@ impl Server {
     
     // Input: shopper user ID, commitment to a chosed random ID
     // Output: a server-chosen random ID
-    fn process_tx_hello_response(&mut self, com: Com) -> u32 {
+    pub(crate) fn process_tx_hello_response(&mut self, com: Com) -> u32 {
         let i_s = rand::thread_rng().gen_range(0..self.num_users);
         let mut tmp = ServerTxTmp {
             i_s: Some(i_s),
@@ -108,7 +108,7 @@ impl Server {
 
     // Input: shopper UID, opened commitment contents: client-chosen random ID and mask
     // Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
-    fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Key, MerkleProof<algorithms::Sha256>) {
+    pub(crate) fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Key, MerkleProof<algorithms::Sha256>) {
         let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         // Recompute commitment and check that it matches.
@@ -133,32 +133,30 @@ impl Server {
     }
 
     // Step 3 of a transaction request
-    fn process_tx(&mut self, shopper: u32, cts: Ciphertext, ctb: Ciphertext, pi: crypto_old::CompressedCtEqProof, tx_id: Com) {
+    pub(crate) fn process_tx(&mut self, shopper: u32, cts: Ciphertext, ctb: Ciphertext, pi: crypto_sh::CompressedCtEqProof, tx_id: Com) {
         // let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
-        assert!(crypto_old::zk_ct_eq_verify(pi));
+        assert!(crypto_sh::zk_ct_eq_verify(pi));
 
         self.tmp.remove(&tx_id);
     }
 
-    // fn settle_balance_hello
-    fn settle_balance_hello(&self, uid: u32) -> Ciphertext {
+    pub(crate) fn settle_balance_hello(&self, uid: u32) -> Ciphertext {
         self.users.get(&uid).unwrap().balance
     }
 
-    // fn settle_balance_finalize
-    fn settle_balance_finalize(&self, pi: crypto_old::CompressedCtDecProof) -> bool {
-        crypto_old::zk_ct_dec_verify(pi)
+    pub(crate) fn settle_balance_finalize(&self, pi: crypto_sh::CompressedCtDecProof) -> bool {
+        crypto_sh::zk_ct_dec_verify(pi)
     }
 }
 
-struct Client {
+pub(crate) struct Client {
     barcode: u64,
     num_users: u32,
     merkle_root: Option<<algorithms::Sha256 as rs_merkle::Hasher>::Hash>,
     tmp: HashMap<Com, ClientTxTmp>,
     sk_enc: Key,
-    pk_enc: Key
+    pub pk_enc: Key
 }
 
 struct ClientTxTmp {
@@ -169,8 +167,8 @@ struct ClientTxTmp {
 }
 
 impl Client {
-    fn new(barcode: u64) -> Self {
-        let keys = crypto_old::elgamal_keygen();
+    pub(crate) fn new(barcode: u64) -> Self {
+        let keys = crypto_sh::elgamal_keygen();
         Client {
             barcode: barcode,
             num_users: 1,
@@ -181,11 +179,11 @@ impl Client {
         }
     }
 
-    fn register_with_server(&self) -> (u64, Key) {
+    pub(crate) fn register_with_server(&self) -> (u64, Key) {
         (self.barcode, self.pk_enc)
     }
 
-    fn update_state(&mut self, num_users: u32, merkle_root: <algorithms::Sha256 as Hasher>::Hash) {
+    pub(crate) fn update_state(&mut self, num_users: u32, merkle_root: <algorithms::Sha256 as Hasher>::Hash) {
         self.num_users = num_users;
         self.merkle_root = Some(merkle_root);
     }
@@ -194,7 +192,7 @@ impl Client {
 
     // Input: N/A
     // Output: commitment to a randomly chosen user ID
-    fn process_tx_hello(&mut self) -> Com {
+    pub(crate) fn process_tx_hello(&mut self) -> Com {
         // Commit to a random index and send it to the server
         let i_c = rand::thread_rng().gen_range(0..self.num_users);
         let r = rand::thread_rng().gen::<[u8; 32]>();
@@ -220,7 +218,7 @@ impl Client {
 
     // Input: server's randomly chosen barcode UID
     // Output: opened commitment to client-chosed barcode UID
-    fn process_tx_compute_id(&mut self, i_s: u32, tx_id: Com) -> (u32, [u8; 32]) {
+    pub(crate) fn process_tx_compute_id(&mut self, i_s: u32, tx_id: Com) -> (u32, [u8; 32]) {
         let mut tmp: &mut ClientTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         let i = (tmp.i_c.unwrap() + i_s) % self.num_users;
@@ -229,7 +227,7 @@ impl Client {
         (tmp.i_c.unwrap(), tmp.r.unwrap())
     }
 
-    fn verify_merkle_proof(&mut self, barcode: u64, pi: MerkleProof<algorithms::Sha256>, pkb: Key, tx_id: Com) -> bool {
+    pub(crate) fn verify_merkle_proof(&mut self, barcode: u64, pi: &MerkleProof<algorithms::Sha256>, pkb: Key, tx_id: Com) -> bool {
         let tmp: &ClientTxTmp = self.tmp.get(&tx_id).unwrap();
 
         let leaf = TreeEntry {
@@ -239,7 +237,7 @@ impl Client {
         };
         let tree_contents = algorithms::Sha256::hash(leaf.to_bytes().as_slice());
 
-        let test = pi.verify(self.merkle_root.unwrap(), &[tmp.uid_b.unwrap().try_into().unwrap()], &[tree_contents], 1);
+        let test = pi.verify(self.merkle_root.unwrap(), &[tmp.uid_b.unwrap().try_into().unwrap()], &[tree_contents], self.num_users.try_into().unwrap());
 
         assert!(test);
 
@@ -247,32 +245,32 @@ impl Client {
     }
 
     // Step 3 of a transaction request
-    fn process_tx(&mut self, pi: MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Key, tx_id: Com) -> (Ciphertext, Ciphertext, crypto_old::CompressedCtEqProof) {
+    pub(crate) fn process_tx(&mut self, pi: &MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Key, tx_id: Com) -> (Ciphertext, Ciphertext, crypto_sh::CompressedCtEqProof) {
         // Verify Merkle proof that the agreed upon index is in the tree
         self.verify_merkle_proof(barcode, pi, pkb, tx_id);
 
         // Encrypt the number of points under both public keys
-        let cts = crypto_old::elgamal_enc(self.pk_enc, -1*points);
-        let cts_data = crypto_old::CompressedTxCiphertextData::new(
+        let cts = crypto_sh::elgamal_enc(self.pk_enc, -1*points);
+        let cts_data = crypto_sh::CompressedTxCiphertextData::new(
             (cts.0, cts.1), cts.2, -1*points, self.pk_enc
         );
 
-        let ctb = crypto_old::elgamal_enc(pkb, points);
-        let ctb_data = crypto_old::CompressedTxCiphertextData::new(
+        let ctb = crypto_sh::elgamal_enc(pkb, points);
+        let ctb_data = crypto_sh::CompressedTxCiphertextData::new(
             (ctb.0, ctb.1), ctb.2, points, pkb
         );
 
         // Generate a zero knowledge proof that these encrypt the same value
-        let pi = crypto_old::zk_ct_eq_prove(cts_data, ctb_data);
+        let pi = crypto_sh::zk_ct_eq_prove(cts_data, ctb_data);
 
         self.tmp.remove(&tx_id);
 
         ((cts.0, cts.1), (ctb.0, ctb.1), pi)
     }
 
-    fn settle_balance(&self, ct: Ciphertext) -> (i32, crypto_old::CompressedCtDecProof) {
-        let plaintext = crypto_old::elgamal_dec(self.sk_enc, ct);
-        let pi = crypto_old::zk_ct_dec_prove(ct, plaintext, self.sk_enc, self.pk_enc);
+    pub(crate) fn settle_balance(&self, ct: Ciphertext) -> (i32, crypto_sh::CompressedCtDecProof) {
+        let plaintext = crypto_sh::elgamal_dec(self.sk_enc, ct);
+        let pi = crypto_sh::zk_ct_dec_prove(ct, plaintext, self.sk_enc, self.pk_enc);
 
         (plaintext, pi)
     }
