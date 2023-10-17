@@ -7,15 +7,15 @@ use std::time::{Instant, Duration};
 use rs_merkle::{algorithms, MerkleProof};
 use ed25519_dalek::Signature;
 
-const N_CLIENTS: usize = 100;
+const N_CLIENTS: usize = 10000;
 
 fn main() {
 
-    /* println!("Full protocol");
+    println!("Full protocol");
     println!("");
 
     println!("---------------------------");
-    println!("--- Client Registration ---");
+    println!("--- Client Registration --- (number of clients)");
     println!("---------------------------");
 
     let mut server = Server::new();
@@ -40,13 +40,14 @@ fn main() {
     }
     let time_server = now.elapsed();
 
-    let res = format!("{: <10} {: <10.3?} {: <10} {: <10.3?}",
+    let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+        N_CLIENTS,
         "Client:", time_client.div_f32(N_CLIENTS as f32),
         "Server:", time_server.div_f32(N_CLIENTS as f32));
     println!("{}", res);
 
     println!("------------------------------");
-    println!("--- Transaction Processing ---");
+    println!("--- Transaction Processing --- (number of users)");
     println!("------------------------------");
 
     struct Tx {
@@ -68,6 +69,9 @@ fn main() {
     let n_txs = 500;
     let min_users = 5000;
     let max_users = 50000;
+    // let n_txs = 50;
+    // let min_users = 10;
+    // let max_users = 10;
     let step = min_users;
 
     let mut server = Server::new();
@@ -217,14 +221,14 @@ fn main() {
     }
 
     println!("----------------------------");
-    println!("--- Receipt Distribution ---");
+    println!("--- Receipt Distribution --- (number of points)");
     println!("----------------------------");
     // Scales with number of points in the receipt.
     // Process receipts with varying amounts of points in them.
 
-    // let n_txs = 100;
+    // let n_txs = 10;
     // let min_points: i32 = 5;
-    // let max_points: i32 = 50;
+    // let max_points: i32 = 5;
     let n_txs = 100;
     let min_points = 100;
     let max_points = 10000;
@@ -279,13 +283,15 @@ fn main() {
     }
 
     println!("------------------------");
-    println!("--- Balance Settling ---");
+    println!("--- Balance Settling --- (number of transactions)");
     println!("------------------------");
     // Scales with number of transactions.
     // Process with varying the number of transactions
 
     let min_txs = 5;
     let max_txs = 100;
+    // let min_txs = 5;
+    // let max_txs = 5;
     let step = min_txs;
 
     for n_txs in (min_txs..(max_txs+1)).step_by(step) {
@@ -341,13 +347,13 @@ fn main() {
             "Client:", time_client.div_f32(N_CLIENTS as f32),
             "Server:", time_server.div_f32(N_CLIENTS as f32));
         println!("{}", res);
-    } */
+    }
 
     println!("Semihonest protocol");
     println!("");
 
     println!("---------------------------");
-    println!("--- Client Registration ---");
+    println!("--- Client Registration --- (number of clients)");
     println!("---------------------------");
 
     let mut server = lib_sh::Server::new();
@@ -372,13 +378,14 @@ fn main() {
     }
     let time_server = now.elapsed();
 
-    let res = format!("{: <10} {: <10.3?} {: <10} {: <10.3?}",
+    let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+        N_CLIENTS,
         "Client:", time_client.div_f32(N_CLIENTS as f32),
         "Server:", time_server.div_f32(N_CLIENTS as f32));
     println!("{}", res);
 
     println!("------------------------------");
-    println!("--- Transaction Processing ---");
+    println!("--- Transaction Processing --- (number of users)");
     println!("------------------------------");
 
     struct TxOld {
@@ -397,12 +404,12 @@ fn main() {
         pi_tx: Option<lib_sh::crypto_sh::CompressedCtEqProof>
     }
 
-    // let n_txs = 500;
-    // let min_users = 5000;
-    // let max_users = 50000;
-    let n_txs = 50;
-    let min_users = 10;
-    let max_users = 10;
+    let n_txs = 500;
+    let min_users = 5000;
+    let max_users = 50000;
+    // let n_txs = 50;
+    // let min_users = 10;
+    // let max_users = 10;
     let step = min_users;
 
     let mut server = lib_sh::Server::new();
@@ -541,16 +548,14 @@ fn main() {
     }
 
     println!("------------------------");
-    println!("--- Balance Settling ---");
+    println!("--- Balance Settling --- (number of points)");
     println!("------------------------");
-    // Scales with number of transactions.
-    // Process with varying the number of transactions
+    // Scales with number of points in balance.
+    // Process with varying numbers of points
 
-    // let min_txs = 5;
-    // let max_txs = 100;
     let n_settles = 10;
-    let min_points = 5;
-    let max_points = 5;
+    let min_points = 0;
+    let max_points = 500;
     let step = 25;
 
     for n_points in (min_points..(max_points+1)).step_by(step) {
@@ -569,16 +574,13 @@ fn main() {
         server.users.get_mut(&0).unwrap().balance = lib_sh::crypto_sh::add_ciphertexts(
             server.users[&0u32].balance, (ct.0, ct.1)
         );
-        let balance = server.settle_balance_hello(0);
+        let _balance = server.settle_balance_hello(0);
 
         let mut proofs = Vec::<lib_sh::crypto_sh::CompressedCtDecProof>::with_capacity(n_settles);
 
-        let mut time_client = Duration::ZERO;
-        let mut time_server = Duration::ZERO;
-
         // Settle balances
         let now = Instant::now();
-        for i in 0..n_settles {
+        for _i in 0..n_settles {
             let out = client.settle_balance((ct.0, ct.1));
             proofs.push(out.1);
         }

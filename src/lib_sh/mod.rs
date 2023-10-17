@@ -90,7 +90,7 @@ impl Server {
     // Output: a server-chosen random ID
     pub(crate) fn process_tx_hello_response(&mut self, com: Com) -> u32 {
         let i_s = rand::thread_rng().gen_range(0..self.num_users);
-        let mut tmp = ServerTxTmp {
+        let tmp = ServerTxTmp {
             i_s: Some(i_s),
             uid_b: None
         };
@@ -109,7 +109,7 @@ impl Server {
     // Input: shopper UID, opened commitment contents: client-chosen random ID and mask
     // Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
     pub(crate) fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Key, MerkleProof<algorithms::Sha256>) {
-        let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+        let tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         // Recompute commitment and check that it matches.
         let mut hasher = Sha256::new();
@@ -134,9 +134,21 @@ impl Server {
 
     // Step 3 of a transaction request
     pub(crate) fn process_tx(&mut self, shopper: u32, cts: Ciphertext, ctb: Ciphertext, pi: crypto_sh::CompressedCtEqProof, tx_id: Com) {
-        // let mut tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+        let tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         assert!(crypto_sh::zk_ct_eq_verify(pi));
+
+        let uid_s = shopper;
+        let uid_b = tmp.uid_b.unwrap();
+
+        self.users.get_mut(&uid_s).unwrap().balance = crypto_sh::add_ciphertexts(
+            self.users[&uid_s].balance,
+            cts
+        );
+        self.users.get_mut(&uid_b).unwrap().balance = crypto_sh::add_ciphertexts(
+            self.users[&uid_b].balance,
+            ctb
+        );
 
         self.tmp.remove(&tx_id);
     }
@@ -219,7 +231,7 @@ impl Client {
     // Input: server's randomly chosen barcode UID
     // Output: opened commitment to client-chosed barcode UID
     pub(crate) fn process_tx_compute_id(&mut self, i_s: u32, tx_id: Com) -> (u32, [u8; 32]) {
-        let mut tmp: &mut ClientTxTmp = self.tmp.get_mut(&tx_id).unwrap();
+        let tmp: &mut ClientTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         let i = (tmp.i_c.unwrap() + i_s) % self.num_users;
         tmp.uid_b = Some(i);

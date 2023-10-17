@@ -352,7 +352,7 @@ impl Client {
 
         // Choose a random mask to encrypt
         let m_bits = rand::thread_rng().gen::<[u8; 32]>();
-        let m_ct = crypto::encrypt(pkb, m_bits);
+        let m_ct = crypto::encrypt(pkb, points, m_bits);
 
         // Convert mask to scalar and compute h^m and g^mx
         let m = Scalar::from_bytes_mod_order(m_bits);
@@ -398,7 +398,7 @@ impl Client {
             let sym_ct = ct.1;
             let nonce = ct.2;
 
-            let m_bits: [u8; 32] = crypto::decrypt(self.sk_enc, (pk_ct, sym_ct), nonce);
+            let (m_bits, x) = crypto::decrypt(self.sk_enc, (pk_ct, sym_ct), nonce);
             let m = Scalar::from_bytes_mod_order(m_bits);
 
             if self.seen_ms.contains(&m_bits) {
@@ -406,10 +406,10 @@ impl Client {
             }
             self.seen_ms.insert(m_bits);
 
-            let m_inv = m.invert();
-            let gx = gmx * &m_inv;
+            // let m_inv = m.invert();
+            // let gx = gmx * &m_inv;
 
-            let x = crypto::dlog_base_g(gx);
+            // let x = crypto::dlog_base_g(gx);
             let x_scalar = crypto::int_to_scalar(x);
 
             // No need to compute the entire ZK proof.

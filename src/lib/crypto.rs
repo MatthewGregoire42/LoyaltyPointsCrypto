@@ -76,11 +76,18 @@ pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> Point {
     ct.1 + (Scalar::zero() - sk) * ct.0
 }
 
-pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12>) {
+pub(crate) fn encrypt(pk: Point, x: i32, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12>) {
     // Choose random point p to encrypt with ElGamal. H(p) is the symmetric key
     // (we model H as a random oracle)
     let p = Point::random(&mut OsRng);
     let ct = elgamal_enc(pk, p);
+
+    // Convert x to bytes and concatenate with the bytes of m.
+    let x_bytes: [u8; 4] = x.to_be_bytes();
+
+    let mut pt: [u8; 36] = [0; 36];
+    pt[0..32].copy_from_slice(&m);
+    pt[32..].copy_from_slice(&x_bytes);
 
     let mut hasher = Sha256::new();
     Digest::update(&mut hasher, pzip(p));
@@ -88,7 +95,7 @@ pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12
 
     let cipher = Aes256Gcm::new(&k);
     let nonce = Aes256Gcm::generate_nonce(&mut rngs::OsRng);
-    let sym_ct = cipher.encrypt(&nonce, m.as_ref());
+    let sym_ct = cipher.encrypt(&nonce, pt.as_ref());
 
     let sym_ct = match sym_ct {
         Ok(ct) => ct,
@@ -98,7 +105,7 @@ pub(crate) fn encrypt(pk: Point, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12
     (ct, sym_ct, nonce)
 }
 
-pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) -> [u8; 32] {
+pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) -> ([u8; 32], i32) {
     let p = elgamal_dec(sk, ct.0);
 
     let mut hasher = Sha256::new();
@@ -106,15 +113,19 @@ pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) 
     let k = hasher.finalize();
 
     let cipher = Aes256Gcm::new(&k);
-    let pt = cipher.decrypt(&nonce, ct.1.as_ref());
+    let pt = cipher.decrypt(&nonce, ct.1.as_ref()).ok();
 
-    match pt {
-        Ok(m) => m.try_into().unwrap(),
-        Err(_) => panic!("Symmetric decryption failed")
-    }
+    let binding = pt.unwrap();
+    let out = binding.split_at(32);
+    let m_tmp = out.0;
+    let x_tmp = out.1;
+    let m: [u8; 32] = m_tmp.try_into().unwrap();
+    let x = i32::from_be_bytes(x_tmp.try_into().unwrap());
+
+    (m, x)
 }
 
-// Use the baby-step giant-step algorithm to compute the discrete log between
+/* // Use the baby-step giant-step algorithm to compute the discrete log between
 // two values (when the discrete log is small). This is only ever used to unmask a
 // number of loyalty points which, by construction of our scheme, is always
 // positive, so we limit our search space to (0, max points).
@@ -137,7 +148,7 @@ pub(crate) fn dlog_base_g(gx: Point) -> i32 {
         Some(x) => x,
         None => panic!("Number of points out of bounds")
     }
-}
+} */
 
 /* // Brute force DL decryption
 // The result of ElGamal decryption (mg) is the value m*g. Assuming m is a small scalar,
