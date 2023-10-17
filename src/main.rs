@@ -7,7 +7,7 @@ use std::time::{Instant, Duration};
 use rs_merkle::{algorithms, MerkleProof};
 use ed25519_dalek::Signature;
 
-const N_CLIENTS: usize = 100; // 10000
+const N_CLIENTS: usize = 10000; // 10000
 
 fn main() {
 
@@ -67,12 +67,12 @@ fn main() {
         sigma: Option<Signature>
     }
 
-    // let n_txs = 500;
-    // let min_users = 5000;
-    // let max_users = 50000;
-    let n_txs = 50;
-    let min_users = 10;
-    let max_users = 10;
+    let n_txs = 500;
+    let min_users = 5000;
+    let max_users = 50000;
+    // let n_txs = 50;
+    // let min_users = 10;
+    // let max_users = 10;
     let step = min_users;
 
     let mut server = Server::new();
@@ -230,12 +230,12 @@ fn main() {
     // Scales with number of points in the receipt.
     // Process receipts with varying amounts of points in them.
 
-    let n_txs = 10;
-    let min_points: i32 = 5;
-    let max_points: i32 = 5;
-    // let n_txs = 100;
-    // let min_points = 100;
-    // let max_points = 10000;
+    // let n_txs = 10;
+    // let min_points: i32 = 5;
+    // let max_points: i32 = 5;
+    let n_txs = 100;
+    let min_points = 100;
+    let max_points = 10000;
     let step = min_points;
 
     for n_points in (min_points..(max_points+1)).step_by(step.try_into().unwrap()) {
@@ -293,10 +293,10 @@ fn main() {
     // Scales with number of transactions.
     // Process with varying the number of transactions
 
-    // let min_txs = 5;
-    // let max_txs = 100;
     let min_txs = 5;
-    let max_txs = 5;
+    let max_txs = 100;
+    // let min_txs = 5;
+    // let max_txs = 5;
     let step = min_txs;
 
     for n_txs in (min_txs..(max_txs+1)).step_by(step) {
@@ -355,7 +355,7 @@ fn main() {
         println!("{}", res);
     }
 
-    /* println!("Semihonest protocol");
+    println!("Semihonest protocol");
     println!("");
 
     println!("---------------------------");
@@ -604,5 +604,5 @@ fn main() {
             "Client:", time_client.div_f32(n_settles as f32),
             "Server:", time_server.div_f32(n_settles as f32));
         println!("{}", res);
-    } */
+    }
 }
