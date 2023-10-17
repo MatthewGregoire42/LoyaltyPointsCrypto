@@ -210,8 +210,6 @@ impl Server {
     pub(crate) fn settle_balance(&self, uid: u32, x: i32, hms: Vec<Point>, sigmas: Vec<Signature>, pi: SettleProof) -> bool {
         let server_bal = crypto::puzip(self.users[&uid].balance);
 
-        let gx = crypto::G*(&crypto::int_to_scalar(x));
-
         // Issue is with verifying signatures
         for i in 0..sigmas.len() {
             let hm = &hms[i];
@@ -414,7 +412,7 @@ impl Client {
 
             self.bal -= x;
             self.server_bal = self.server_bal + (gmx * crypto::int_to_scalar(-1));
-            self.receipts.push((x_scalar, m, hm * crypto::int_to_scalar(-1), rct.1));
+            self.receipts.push((x_scalar*crypto::int_to_scalar(-1), m * crypto::int_to_scalar(-1), hm * crypto::int_to_scalar(-1), rct.1));
         }
     }
 

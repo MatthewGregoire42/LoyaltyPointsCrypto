@@ -402,6 +402,25 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
         t_zs.push(t_ts[i] + ts[i]*c);
     }
 
+    let mut x_sum = Scalar::zero();
+    let mut xz_sum = Scalar::zero();
+    for i in 0..n {
+        x_sum = x_sum + xs[i];
+        xz_sum = xz_sum + x_zs[i];
+    }
+    println!("Client xz_sum: {:?}", xz_sum);
+    // println!("Client b1_t + &(x_sum*c): {:?}", b1_t + &(x_sum*c)*G);
+
+    let ps = xz_sum;
+    let qs = x_sum*c + xt_sum;
+    // println!("{:?} {:?} {}", ps, qs, ps == qs);
+    let q = &(xz_sum)*G;
+    let qprime = b1_t + &(int_to_scalar(x)*c)*G;
+
+    println!("-------");
+    println!("{} {}", q == qprime, qprime == &(x_sum*c)*G + b1_t);
+    println!("-------");
+
     SettleProof {
         vs: vs,
         es: es,
@@ -451,6 +470,8 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
         az_sum = az_sum + pi.a_zs[i];
         xz_sum = xz_sum + pi.x_zs[i];
     }
+    println!("Server xz_sum: {:?}", xz_sum);
+    // println!("Server b1_t + &(x_sum*c)*G: {:?}", pi.b1_t + &(int_to_scalar(x)*c)*G);
 
     let check_b1 = &xz_sum * G == pi.b1_t + (&c * b1);
     let check_b2 = &az_sum * G == pi.b2_t + (&c * b2);
