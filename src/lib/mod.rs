@@ -11,12 +11,13 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use aes_gcm::{Nonce};
 use generic_array::typenum::U12;
+use sha2::Sha512;
 
 pub(crate) type Com = [u8; 32];
 pub(crate) type Point = RistrettoPoint;
 pub(crate) type CPoint = [u8; 32];
 pub(crate) type Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>);
-pub(crate) type Receipt = (Ciphertext, TxAndProof);
+pub(crate) type Receipt = (Ciphertext, TxAndProof, [u8;32]);
 
 //////////////////////////////////////////////////////////////////
 // Server code
@@ -36,7 +37,8 @@ pub(crate) struct Server {
 struct ServerTxTmp {
     uid_s: u32, // Shopper's user ID
     i_s: Option<u32>, // Server's chosen index for card-swapping phase
-    uid_b: Option<u32> // Barcode owner's user ID
+    uid_b: Option<u32>, // Barcode owner's user ID
+    base: Option<[u8;32]>
 }
 
 // The server's record of a user in the system
@@ -117,7 +119,8 @@ impl Server {
         let tmp = ServerTxTmp {
             uid_s: uid_s,
             i_s: Some(i_s),
-            uid_b: None
+            uid_b: None,
+            base: None
         };
 
         // Store in-progress TX info server side
@@ -133,7 +136,7 @@ impl Server {
 
     // Input: shopper UID, opened commitment contents: client-chosen random ID and mask
     // Output: barcode owner's UID, barcode, and public key, and merkle inclusion proof
-    pub(crate) fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Point, MerkleProof<algorithms::Sha256>) {
+    pub(crate) fn process_tx_barcode_gen(&mut self, i_c: u32, r: [u8; 32], tx_id: Com) -> (u32, u64, Point, [u8; 32], MerkleProof<algorithms::Sha256>) {
         let tmp: &mut ServerTxTmp = self.tmp.get_mut(&tx_id).unwrap();
 
         // Recompute commitment and check that it matches.
@@ -154,7 +157,11 @@ impl Server {
 
         let pi: MerkleProof<algorithms::Sha256> = self.merkle_tree.proof(&[uid_b.try_into().unwrap()]);
 
-        (uid_b, barcode, puzip(pk_b), pi)
+        // Select random base for the client to use
+        let base = rand::thread_rng().gen::<[u8; 32]>();
+        tmp.base = Some(base);
+
+        (uid_b, barcode, puzip(pk_b), base, pi)
     }
 
     // Step 3 of a transaction request
@@ -162,15 +169,17 @@ impl Server {
     // Input: tx_id, encrypted m, masked m (h^m) masked points (g^mx), and ZK correctness proof
     // Output: a signature on h^m
     pub(crate) fn process_tx(&mut self, ct: Ciphertext, tx: TxAndProof, tx_id: Com) -> Signature {
-        
-        assert!(crypto::zk_tx_verify(&tx), "Transaction proof failed");
 
         let tmp: &ServerTxTmp = self.tmp.get(&tx_id).unwrap();
         let uid_s = tmp.uid_s;
         let uid_b = tmp.uid_b.unwrap();
+        let base = tmp.base.unwrap();
+        let g = Point::hash_from_bytes::<Sha512>(&base);
+
+        assert!(crypto::zk_tx_verify(&tx, g), "Transaction proof failed");
         
         let hm = tx.r2.clone();
-        let gmx = tx.r3.clone();
+        let gmx = tx.r3.clone(); // base^mx
 
         // Update both users' balances
         let bal_s = puzip(self.users[&uid_s].balance);
@@ -180,12 +189,12 @@ impl Server {
         self.users.get_mut(&uid_b).unwrap().balance = pzip(bal_b + gmx * &crypto::int_to_scalar(-1));
         
         // Store the receipt to send to the barcode owner
-        let rct  = (ct, tx);
+        let rct  = (ct, tx, base);
         let rcts = self.receipts.get_mut(&uid_b).unwrap();
         rcts.push(rct);
 
-        // Sign and return h^m
-        crypto::sign(&self.sk, &hm, tmp.uid_s)
+        // Sign and return (h^m, r)
+        crypto::sign(&self.sk, &hm, base)
     }
 
     // Receipt distribution
@@ -194,10 +203,11 @@ impl Server {
 
         let rcts = self.receipts.get_mut(&uid).unwrap();
 
-        // Unpack h^m, and sign (h^m)^-1 = h^-m
+        // Unpack h^m and base, and sign (h^m, base)
         for rct in &*rcts {
             let hm = rct.1.r2;
-            let sigma = crypto::sign(&self.sk, &hm, uid);
+            let base = rct.2;
+            let sigma = crypto::sign(&self.sk, &hm, base);
 
             out.push((rct.clone(), sigma));
         }
@@ -207,22 +217,26 @@ impl Server {
     }
 
     // Accept or reject a client's request to settle
-    pub(crate) fn settle_balance(&self, uid: u32, x: i32, hms: Vec<Point>, sigmas: Vec<Signature>, pi: SettleProof) -> bool {
+    pub(crate) fn settle_balance(&self, uid: u32, x: i32, hms: Vec<Point>, rs: Vec<[u8; 32]>, sigmas: Vec<Signature>, pi: SettleProof) -> bool {
         let server_bal = crypto::puzip(self.users[&uid].balance);
 
-        assert!(server_bal == crypto::G * &crypto::int_to_scalar(0));
+        let mut gs = Vec::<Point>::with_capacity(sigmas.len());
 
         // Issue is with verifying signatures
         for i in 0..sigmas.len() {
             let hm = &hms[i];
+            let r = &rs[i];
             let s = sigmas[i];
 
-            if !crypto::verify(self.vk, hm, uid, s) {
+            if !crypto::verify(self.vk, hm, r, s) {
                 return false;
             }
+
+            let g = Point::hash_from_bytes::<Sha512>(r);
+            gs.push(g);
         }
 
-        crypto::zk_settle_verify(x, server_bal, hms, pi)
+        crypto::zk_settle_verify(x, server_bal, hms, gs, pi)
     }
 }
 
@@ -230,7 +244,8 @@ impl Server {
 // Client code
 //////////////////////////////////////////////////////////////////
 
-type ClientReceipt = (Scalar, Scalar, Point, Signature); // m, h^m, sigma_(h^m) stored until settling time
+// m, h^m, base string, sigma_(h^m) stored until settling time
+type ClientReceipt = (Scalar, Scalar, Point, [u8;32], Signature);
 
 pub(crate) struct Client {
     pub barcode: u64,
@@ -253,7 +268,8 @@ struct ClientTxTmp {
     uid_b: Option<u32>,
     m: Option<Scalar>,
     hm: Option<Point>,
-    x: Option<Scalar>
+    x: Option<Scalar>,
+    base: Option<[u8; 32]>
 }
 
 impl Client {
@@ -306,7 +322,8 @@ impl Client {
                 uid_b: None,
                 m: None,
                 hm: None,
-                x: None
+                x: None,
+                base: None
             }
         );
 
@@ -344,7 +361,7 @@ impl Client {
     }
 
     // Step 3 of a transaction request
-    pub(crate) fn process_tx(&mut self, pi: &MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Point, tx_id: Com) -> (Ciphertext, TxAndProof) {
+    pub(crate) fn process_tx(&mut self, pi: &MerkleProof<algorithms::Sha256>, barcode: u64, points: i32, pkb: Point, base: [u8; 32], tx_id: Com) -> (Ciphertext, TxAndProof) {
         self.bal += points;
 
         // Verify Merkle proof that the agreed upon index is in the tree
@@ -358,18 +375,20 @@ impl Client {
         let m = Scalar::from_bytes_mod_order(m_bits);
         let x = crypto::int_to_scalar(points);
         let hm = h_point()*&m;
-        let gmx = crypto::G*&(m * x);
+        let g = Point::hash_from_bytes::<Sha512>(&base);
+        let gmx = g * &(m * x);
 
         self.server_bal += gmx;
 
         // Prove that (h^m, g^mx) is well-formed
-        let pi = crypto::zk_tx_prove(hm, gmx, m, x);
+        let pi = crypto::zk_tx_prove(hm, gmx, g, m, x);
 
         // Store m, h^m to associate with the signature from the server
         let tmp: &mut ClientTxTmp = self.tmp.get_mut(&tx_id).unwrap();
         tmp.m = Some(m);
         tmp.hm = Some(hm);
         tmp.x = Some(x);
+        tmp.base = Some(base);
 
         (m_ct, pi)
     }
@@ -379,19 +398,21 @@ impl Client {
         let m = tmp.m.unwrap();
         let hm = tmp.hm.unwrap();
         let x = tmp.x.unwrap();
+        let base = tmp.base.unwrap();
 
-        self.receipts.push((x, m, hm, sigma));
+        self.receipts.push((x, m, hm, base, sigma));
 
         self.tmp.remove(&tx_id);
     }
 
-    // Receipt = (Ciphertext, TxAndProof)
+    // Receipt = (Ciphertext, TxAndProof, [u8; 32])
     // Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>)
     pub(crate) fn process_receipts(&mut self, rcts: Vec<(Receipt, Signature)>) {
         for rct in rcts {
             let ct = rct.0.0;
             let tx_and_proof = rct.0.1;
             let hm = tx_and_proof.r2;
+            let base = rct.0.2;
             let gmx = tx_and_proof.r3;
 
             let pk_ct = ct.0;
@@ -406,19 +427,16 @@ impl Client {
             }
             self.seen_ms.insert(m_bits);
 
-            // let m_inv = m.invert();
-            // let gx = gmx * &m_inv;
-
-            // let x = crypto::dlog_base_g(gx);
+            let g = Point::hash_from_bytes::<Sha512>(&base);
             let x_scalar = crypto::int_to_scalar(x);
 
             // No need to compute the entire ZK proof.
             assert!(crypto::h_point() * &m == hm);
-            assert!(crypto::G * &(m * x_scalar) == gmx);
+            assert!(g * &(m * x_scalar) == gmx);
 
             self.bal -= x;
             self.server_bal = self.server_bal + (gmx * crypto::int_to_scalar(-1));
-            self.receipts.push((x_scalar*crypto::int_to_scalar(-1), m, hm, rct.1));
+            self.receipts.push((x_scalar*crypto::int_to_scalar(-1), m, hm, base, rct.1));
         }
     }
 
@@ -430,7 +448,7 @@ impl Client {
 
        The client then can reset their state.
     */
-    pub(crate) fn settle_balance(&self) -> (i32, Vec<Point>, Vec<Signature>, SettleProof) {
+    pub(crate) fn settle_balance(&self) -> (i32, Vec<Point>, Vec<[u8; 32]>, Vec<Signature>, SettleProof) {
 
         let x = self.bal;
         let server_bal = self.server_bal;
@@ -439,22 +457,29 @@ impl Client {
         let mut xs = Vec::new();
         let mut ms = Vec::new();
         let mut hms = Vec::new();
+        let mut bases = Vec::new();
+        let mut gs = Vec::new();
         let mut signatures = Vec::new();
 
         for rct in rcts {
             let x = rct.0;
             let m = rct.1;
             let hm = rct.2;
-            let sigma = rct.3;
+            let base = rct.3;
+            let sigma = rct.4;
 
             xs.push(x);
             ms.push(m);
             hms.push(hm);
+            bases.push(base);
             signatures.push(sigma);
+
+            let g = Point::hash_from_bytes::<Sha512>(&base);
+            gs.push(g);
         }
 
-        let pi = crypto::zk_settle_prove(x, server_bal, &hms, &xs, &ms);
+        let pi = crypto::zk_settle_prove(x, server_bal, &hms, &gs, &xs, &ms);
 
-        (x, hms, signatures, pi)
+        (x, hms, bases, signatures, pi)
     }
 }

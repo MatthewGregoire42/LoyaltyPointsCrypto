@@ -7,7 +7,7 @@ use std::time::{Instant, Duration};
 use rs_merkle::{algorithms, MerkleProof};
 use ed25519_dalek::Signature;
 
-const N_CLIENTS: usize = 10000;
+const N_CLIENTS: usize = 100; // 10000
 
 fn main() {
 
@@ -60,18 +60,19 @@ fn main() {
         uid_b: Option<u32>,
         barcode: Option<u64>,
         pk_b: Option<Point>,
+        base: Option<[u8; 32]>,
         pi_merkle: Option<MerkleProof<algorithms::Sha256>>,
         m_ct: Option<Ciphertext>,
         pi_tx: Option<TxAndProof>,
         sigma: Option<Signature>
     }
 
-    let n_txs = 500;
-    let min_users = 5000;
-    let max_users = 50000;
-    // let n_txs = 50;
-    // let min_users = 10;
-    // let max_users = 10;
+    // let n_txs = 500;
+    // let min_users = 5000;
+    // let max_users = 50000;
+    let n_txs = 50;
+    let min_users = 10;
+    let max_users = 10;
     let step = min_users;
 
     let mut server = Server::new();
@@ -115,6 +116,7 @@ fn main() {
                 uid_b: None,
                 barcode: None,
                 pk_b: None,
+                base: None,
                 pi_merkle: None,
                 m_ct: None,
                 pi_tx: None,
@@ -165,7 +167,8 @@ fn main() {
             tx.uid_b = Some(out.0);
             tx.barcode = Some(out.1);
             tx.pk_b = Some(out.2);
-            tx.pi_merkle = Some(out.3);
+            tx.base = Some(out.3);
+            tx.pi_merkle = Some(out.4);
         }
         time_server += now.elapsed();
         // -----------------------------
@@ -178,10 +181,11 @@ fn main() {
             let pi_merkle = tx.pi_merkle.as_ref().unwrap();
             let barcode = tx.barcode.unwrap();
             let pk_b = tx.pk_b.unwrap();
+            let base = tx.base.unwrap();
             let com = tx.com.unwrap();
             let points = tx.points;
 
-            let out = shopper.process_tx(pi_merkle, barcode, points, pk_b, com);
+            let out = shopper.process_tx(pi_merkle, barcode, points, pk_b, base, com);
             tx.m_ct = Some(out.0);
             tx.pi_tx = Some(out.1);
         }
@@ -226,12 +230,12 @@ fn main() {
     // Scales with number of points in the receipt.
     // Process receipts with varying amounts of points in them.
 
-    // let n_txs = 10;
-    // let min_points: i32 = 5;
-    // let max_points: i32 = 5;
-    let n_txs = 100;
-    let min_points = 100;
-    let max_points = 10000;
+    let n_txs = 10;
+    let min_points: i32 = 5;
+    let max_points: i32 = 5;
+    // let n_txs = 100;
+    // let min_points = 100;
+    // let max_points = 10000;
     let step = min_points;
 
     for n_points in (min_points..(max_points+1)).step_by(step.try_into().unwrap()) {
@@ -256,9 +260,10 @@ fn main() {
             let out = server.process_tx_barcode_gen(i_c, r, com);
             let barcode = out.1;
             let pk_b = out.2;
-            let pi_merkle = out.3;
+            let base = out.3;
+            let pi_merkle = out.4;
 
-            let out = client.process_tx(&pi_merkle, barcode, n_points.try_into().unwrap(), pk_b, com);
+            let out = client.process_tx(&pi_merkle, barcode, n_points.try_into().unwrap(), pk_b, base, com);
             let m_ct = out.0;
             let pi_tx = out.1;
 
@@ -288,10 +293,10 @@ fn main() {
     // Scales with number of transactions.
     // Process with varying the number of transactions
 
-    let min_txs = 5;
-    let max_txs = 100;
     // let min_txs = 5;
-    // let max_txs = 5;
+    // let max_txs = 100;
+    let min_txs = 5;
+    let max_txs = 5;
     let step = min_txs;
 
     for n_txs in (min_txs..(max_txs+1)).step_by(step) {
@@ -316,10 +321,11 @@ fn main() {
             let out = server.process_tx_barcode_gen(i_c, r, com);
             let barcode = out.1;
             let pk_b = out.2;
-            let pi_merkle = out.3;
+            let base = out.3;
+            let pi_merkle = out.4;
 
             let n_points: i32 = rand::thread_rng().gen_range(0..300).try_into().unwrap();
-            let out = client.process_tx(&pi_merkle, barcode, n_points, pk_b, com);
+            let out = client.process_tx(&pi_merkle, barcode, n_points, pk_b, base, com);
             let m_ct = out.0;
             let pi_tx = out.1;
 
@@ -337,7 +343,7 @@ fn main() {
         let time_client = now.elapsed();
 
         let now = Instant::now();
-        let test = server.settle_balance(0, out.0, out.1, out.2, out.3);
+        let test = server.settle_balance(0, out.0, out.1, out.2, out.3, out.4);
         let time_server = now.elapsed();
         
         assert!(test);
@@ -349,7 +355,7 @@ fn main() {
         println!("{}", res);
     }
 
-    println!("Semihonest protocol");
+    /* println!("Semihonest protocol");
     println!("");
 
     println!("---------------------------");
@@ -598,5 +604,5 @@ fn main() {
             "Client:", time_client.div_f32(n_settles as f32),
             "Server:", time_server.div_f32(n_settles as f32));
         println!("{}", res);
-    }
+    } */
 }

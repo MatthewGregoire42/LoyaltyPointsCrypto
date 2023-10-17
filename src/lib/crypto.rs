@@ -196,7 +196,7 @@ pub(crate) struct TxAndProof {
     t_z: Scalar
 }
 
-pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar) -> TxAndProof {
+pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, g: Point, m: Scalar, x: Scalar) -> TxAndProof {
     let r2 = masked_m;
     let r3 = masked_x;
     let a = m*x;
@@ -206,10 +206,10 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     // Need to share: v, e, vx, ex
     let y = Scalar::random(&mut OsRng);
     let t = Scalar::random(&mut OsRng);
-    let v  = &y*G;
-    let e  = &y*u + &m*G;
-    let vx = &t*G;
-    let ex = &t*u + &a*G;
+    let v  = &y*g;
+    let e  = &y*u + &m*g;
+    let vx = &t*g;
+    let ex = &t*u + &a*g;
 
     // Commitment
     let m_t = Scalar::random(&mut OsRng);
@@ -218,11 +218,11 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     let t_t = Scalar::random(&mut OsRng);
 
     let r2_t = &m_t*h_point();
-    let r3_t = &a_t*G;
-    let v_t = &y_t*G;
-    let e_t = &y_t*u + &m_t*G;
-    let vx_t = &t_t*G;
-    let ex_t = &t_t*u + &a_t*G;
+    let r3_t = &a_t*g;
+    let v_t = &y_t*g;
+    let e_t = &y_t*u + &m_t*g;
+    let vx_t = &t_t*g;
+    let ex_t = &t_t*u + &a_t*g;
 
     // Challenge
     let mut hasher = Sha512::default();
@@ -261,7 +261,7 @@ pub(crate) fn zk_tx_prove(masked_m: Point, masked_x: Point, m: Scalar, x: Scalar
     }
 }
 
-pub(crate) fn zk_tx_verify(pi: &TxAndProof) -> bool {
+pub(crate) fn zk_tx_verify(pi: &TxAndProof, g: Point) -> bool {
     let u = u_point();
 
     // Recompute c
@@ -274,11 +274,11 @@ pub(crate) fn zk_tx_verify(pi: &TxAndProof) -> bool {
     let c = Scalar::from_hash(hasher);
 
     let check1 = &pi.m_z * h_point() == pi.r2_t + &c * pi.r2;
-    let check2 = &pi.a_z * G == pi.r3_t + &c * pi.r3;
-    let check3 = &pi.y_z * G == pi.v_t + &c * pi.v;
-    let check4 = &pi.y_z * u + &pi.m_z * G == pi.e_t + &c * pi.e;
-    let check5 = &pi.t_z * G == pi.vx_t + &c * pi.vx;
-    let check6 = &pi.t_z * u + &pi.a_z * G == pi.ex_t + &c * pi.ex;
+    let check2 = &pi.a_z * g == pi.r3_t + &c * pi.r3;
+    let check3 = &pi.y_z * g == pi.v_t + &c * pi.v;
+    let check4 = &pi.y_z * u + &pi.m_z * g == pi.e_t + &c * pi.e;
+    let check5 = &pi.t_z * g == pi.vx_t + &c * pi.vx;
+    let check6 = &pi.t_z * u + &pi.a_z * g == pi.ex_t + &c * pi.ex;
 
     check1 && check2 && check3 && check4 && check5 && check6
 }
@@ -309,7 +309,7 @@ pub(crate) struct SettleProof {
 // for each transaction touching this balance.
 // Output: four auxilliary variables for each transaction, and the commitment/response
 // components of the corresponding ZK proof.
-pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
+pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>, gs: &Vec::<Point>,
                               xs: &Vec::<Scalar>, ms: &Vec::<Scalar>) -> SettleProof {
     // Decompress
     let n = xs.len();                        // Number of transactions
@@ -317,6 +317,8 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
     let b2 = bal;                            // Masked balance
     let h = h_point();
     let u = u_point();
+
+    println!("Client bal: {:?}", bal);
 
     // Auxilliary scalars for nonlinear proofs
     let mut aas = Vec::<Scalar>::with_capacity(n);  // 'as' is a Rust keyword
@@ -346,8 +348,9 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
         ys.push(y);
         ts.push(xs[i]*ys[i]);
 
-        let v = &y * G;
-        let e = &y * u + &ms[i] * G;
+        let g = gs[i];
+        let v = &y * g;
+        let e = &y * u + &ms[i] * g;
         vs.push(v);
         es.push(e);
         vxs.push(v*xs[i]);
@@ -360,22 +363,20 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
         t_ts.push(Scalar::random(&mut OsRng));
 
         b_mts.push(&m_ts[i]*h);
-        v_ts.push(&y_ts[i]*G);
-        e_ts.push(&y_ts[i]*u + (&m_ts[i]*G));
-        vx_ts.push(&t_ts[i]*G);
-        ex_ts.push(&t_ts[i]*u + (&a_ts[i]*G));
+        v_ts.push(&y_ts[i]*g);
+        e_ts.push(&y_ts[i]*u + (&m_ts[i]*g));
+        vx_ts.push(&t_ts[i]*g);
+        ex_ts.push(&t_ts[i]*u + (&a_ts[i]*g));
     }
 
-    // TODO: can't do this as just one sum, need to multiply each x_i term individually (and change the verification as well)
-    let mut at_sum = Scalar::zero();
+    let mut b2_t = G * &Scalar::zero();
     let mut xt_sum = Scalar::zero();
     for i in 0..n {
-        at_sum = at_sum + a_ts[i];
         xt_sum = xt_sum + x_ts[i];
+        b2_t = b2_t + gs[i] * &aas[i];
     }
 
     let b1_t = &xt_sum * G;
-    let b2_t = &at_sum * G;
 
     // Challenge
     let mut hasher = Sha512::default();
@@ -434,9 +435,10 @@ pub(crate) fn zk_settle_prove(x: i32, bal: Point, b_ms: &Vec::<Point>,
     }
 }
 
-pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleProof) -> bool {
+pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, gs: Vec<Point>, pi: SettleProof) -> bool {
     let n = b_ms.len();
     let b1 = &int_to_scalar(x)*G;
+    println!("Server bal: {:?}", bal);
     let b2 = bal;
     let u = u_point();
 
@@ -454,19 +456,22 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
     
     let c = Scalar::from_hash(hasher);
 
-    let mut az_sum = Scalar::zero();
     let mut xz_sum = Scalar::zero();
+    let mut b2_left = &Scalar::zero() * G;
     for i in 0..n {
-        az_sum = az_sum + pi.a_zs[i];
         xz_sum = xz_sum + pi.x_zs[i];
+        b2_left = b2_left + gs[i] * &pi.a_zs[i];
     }
 
     let check_b1 = &xz_sum * G == pi.b1_t + (&c * b1);
-    let check_b2 = &az_sum * G == pi.b2_t + (&c * b2);
+    let check_b2 = b2_left == pi.b2_t + (&c * b2);
+
+    println!("{} {}", check_b1, check_b2);
 
     let mut result = check_b1 && check_b2;
     for i in 0..n {
         let b_m = b_ms[i];
+        let g = gs[i];
         let v = pi.vs[i];
         let e = pi.es[i];
         let vx = pi.vxs[i];
@@ -484,10 +489,12 @@ pub(crate) fn zk_settle_verify(x: i32, bal: Point, b_ms: Vec<Point>, pi: SettleP
         let t_z = pi.t_zs[i];
 
         let check1 = &m_z*h_point() == b_mt + (&c*b_m);
-        let check2 = &y_z*G == v_t + (&c*v);
-        let check3 = &y_z*u + &m_z*G == e_t + (&c*e);
-        let check4 = &t_z*G == vx_t + (&c*vx);
-        let check5 = &t_z*u + &a_z*G == ex_t + (&c*ex);
+        let check2 = &y_z*g == v_t + (&c*v);
+        let check3 = &y_z*u + &m_z*g == e_t + (&c*e);
+        let check4 = &t_z*g == vx_t + (&c*vx);
+        let check5 = &t_z*u + &a_z*g == ex_t + (&c*ex);
+
+        println!("{} {} {} {} {}", check1, check2, check3, check4, check5);
 
         result = result && check1 && check2 && check3 && check4 && check5;
         if !result {
@@ -503,22 +510,20 @@ pub(crate) fn signature_keygen() -> (SigningKey, VerifyingKey) {
     (sk, vk)
 }
 
-pub(crate) fn sign(sk: &SigningKey, p: &Point, uid: u32) -> Signature {
+pub(crate) fn sign(sk: &SigningKey, p: &Point, r: [u8; 32]) -> Signature {
 
-    let uid_bytes: [u8; 4] = uid.to_be_bytes();
-    let mut to_sign: [u8; 36] = [0; 36];
+    let mut to_sign: [u8; 64] = [0; 64];
     to_sign[..32].copy_from_slice(&pzip(*p));
-    to_sign[32..].copy_from_slice(&uid_bytes);
+    to_sign[32..].copy_from_slice(&r);
 
     (*sk).sign(&to_sign)
 }
 
-pub(crate) fn verify(vk: VerifyingKey, p: &Point, uid: u32, s: Signature) -> bool {
+pub(crate) fn verify(vk: VerifyingKey, p: &Point, r: &[u8; 32], s: Signature) -> bool {
 
-    let uid_bytes: [u8; 4] = uid.to_be_bytes();
-    let mut to_verify: [u8; 36] = [0; 36];
+    let mut to_verify: [u8; 64] = [0; 64];
     to_verify[..32].copy_from_slice(&pzip(*p));
-    to_verify[32..].copy_from_slice(&uid_bytes);
+    to_verify[32..].copy_from_slice(r);
 
     vk.verify(&to_verify, &s).is_ok()
 }
