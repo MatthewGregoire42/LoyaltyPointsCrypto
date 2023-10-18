@@ -17,7 +17,7 @@ pub(crate) type Com = [u8; 32];
 pub(crate) type Point = RistrettoPoint;
 pub(crate) type CPoint = [u8; 32];
 pub(crate) type Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>);
-pub(crate) type Receipt = (Ciphertext, TxAndProof, [u8;32]);
+pub(crate) type Receipt = (Ciphertext, TxAndProof);
 
 //////////////////////////////////////////////////////////////////
 // Server code
@@ -28,7 +28,7 @@ pub(crate) struct Server {
     sk: SigningKey,
     vk: VerifyingKey,
     users: HashMap<u32, UserRecord>,
-    receipts: HashMap<u32, Vec<Receipt>>,
+    receipts: HashMap<u32, Vec<(Receipt, [u8; 32])>>,
     merkle_tree: MerkleTree<algorithms::Sha256>,
     tmp: HashMap<Com, ServerTxTmp>,
     default_bal: CPoint
@@ -189,9 +189,9 @@ impl Server {
         self.users.get_mut(&uid_b).unwrap().balance = pzip(bal_b + gmx * &crypto::int_to_scalar(-1));
         
         // Store the receipt to send to the barcode owner
-        let rct  = (ct, tx, base);
+        let rct  = (ct, tx);
         let rcts = self.receipts.get_mut(&uid_b).unwrap();
-        rcts.push(rct);
+        rcts.push((rct, base));
 
         // Sign and return (h^m, r)
         crypto::sign(&self.sk, &hm, base)
@@ -204,10 +204,9 @@ impl Server {
         let rcts = self.receipts.get_mut(&uid).unwrap();
 
         // Unpack h^m and base, and sign (h^m, base)
-        for rct in &*rcts {
+        for (rct, base) in &*rcts {
             let hm = rct.1.r2;
-            let base = rct.2;
-            let sigma = crypto::sign(&self.sk, &hm, base);
+            let sigma = crypto::sign(&self.sk, &hm, *base);
 
             out.push((rct.clone(), sigma));
         }
@@ -369,7 +368,7 @@ impl Client {
 
         // Choose a random mask to encrypt
         let m_bits = rand::thread_rng().gen::<[u8; 32]>();
-        let m_ct = crypto::encrypt(pkb, points, m_bits);
+        let m_ct = crypto::encrypt(pkb, points, m_bits, base);
 
         // Convert mask to scalar and compute h^m and g^mx
         let m = Scalar::from_bytes_mod_order(m_bits);
@@ -405,21 +404,20 @@ impl Client {
         self.tmp.remove(&tx_id);
     }
 
-    // Receipt = (Ciphertext, TxAndProof, [u8; 32])
+    // Receipt = (Ciphertext, TxAndProof)
     // Ciphertext = ((Point, Point), Vec<u8>, Nonce<U12>)
     pub(crate) fn process_receipts(&mut self, rcts: Vec<(Receipt, Signature)>) {
         for rct in rcts {
             let ct = rct.0.0;
             let tx_and_proof = rct.0.1;
             let hm = tx_and_proof.r2;
-            let base = rct.0.2;
             let gmx = tx_and_proof.r3;
 
             let pk_ct = ct.0;
             let sym_ct = ct.1;
             let nonce = ct.2;
 
-            let (m_bits, x) = crypto::decrypt(self.sk_enc, (pk_ct, sym_ct), nonce);
+            let (m_bits, x, base) = crypto::decrypt(self.sk_enc, (pk_ct, sym_ct), nonce);
             let m = Scalar::from_bytes_mod_order(m_bits);
 
             if self.seen_ms.contains(&m_bits) {

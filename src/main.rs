@@ -1,13 +1,14 @@
-mod lib;
+mod lib_mal;
 mod lib_sh;
-use lib::*;
+use lib_mal::*;
 use std::vec::Vec;
 use rand::Rng;
 use std::time::{Instant, Duration};
 use rs_merkle::{algorithms, MerkleProof};
 use ed25519_dalek::Signature;
 
-const N_CLIENTS: usize = 10000; // 10000
+const DEBUG: bool = true;
+const N_CLIENTS: usize = 100; // 10000
 
 fn main() {
 
@@ -67,12 +68,14 @@ fn main() {
         sigma: Option<Signature>
     }
 
-    let n_txs = 500;
-    let min_users = 5000;
-    let max_users = 50000;
-    // let n_txs = 50;
-    // let min_users = 10;
-    // let max_users = 10;
+    let mut n_txs = 500;
+    let mut min_users = 5000;
+    let mut max_users = 50000;
+    if DEBUG {
+        n_txs = 50;
+        min_users = 10;
+        max_users = 10;
+    }
     let step = min_users;
 
     let mut server = Server::new();
@@ -219,8 +222,8 @@ fn main() {
 
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             n_users,
-            "Client:", time_client.div_f32(N_CLIENTS as f32),
-            "Server:", time_server.div_f32(N_CLIENTS as f32));
+            "Client:", time_client.div_f32(n_txs as f32),
+            "Server:", time_server.div_f32(n_txs as f32));
         println!("{}", res);
     }
 
@@ -230,12 +233,14 @@ fn main() {
     // Scales with number of points in the receipt.
     // Process receipts with varying amounts of points in them.
 
-    // let n_txs = 10;
-    // let min_points: i32 = 5;
-    // let max_points: i32 = 5;
-    let n_txs = 100;
-    let min_points = 100;
-    let max_points = 10000;
+    let mut n_txs = 100;
+    let mut min_points: i32 = 100;
+    let mut max_points: i32 = 10000;
+    if DEBUG {
+        n_txs = 10;
+        min_points = 5;
+        max_points = 5;
+    }
     let step = min_points;
 
     for n_points in (min_points..(max_points+1)).step_by(step.try_into().unwrap()) {
@@ -282,8 +287,8 @@ fn main() {
 
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             n_points,
-            "Client:", time_client.div_f32(N_CLIENTS as f32),
-            "Server:", time_server.div_f32(N_CLIENTS as f32));
+            "Client:", time_client.div_f32(n_txs as f32),
+            "Server:", time_server.div_f32(n_txs as f32));
         println!("{}", res);
     }
 
@@ -293,10 +298,12 @@ fn main() {
     // Scales with number of transactions.
     // Process with varying the number of transactions
 
-    let min_txs = 5;
-    let max_txs = 100;
-    // let min_txs = 5;
-    // let max_txs = 5;
+    let mut min_txs = 5;
+    let mut max_txs = 100;
+    if DEBUG {
+        min_txs = 5;
+        max_txs = 5;
+    }
     let step = min_txs;
 
     for n_txs in (min_txs..(max_txs+1)).step_by(step) {
@@ -350,8 +357,8 @@ fn main() {
         
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             n_txs*2, // Since we only initialize one client, every tx touches their account twice
-            "Client:", time_client.div_f32(N_CLIENTS as f32),
-            "Server:", time_server.div_f32(N_CLIENTS as f32));
+            "Client:", time_client.div_f32((n_txs*2) as f32),
+            "Server:", time_server.div_f32((n_txs*2) as f32));
         println!("{}", res);
     }
 
@@ -410,12 +417,14 @@ fn main() {
         pi_tx: Option<lib_sh::crypto_sh::CompressedCtEqProof>
     }
 
-    let n_txs = 500;
-    let min_users = 5000;
-    let max_users = 50000;
-    // let n_txs = 50;
-    // let min_users = 10;
-    // let max_users = 10;
+    let mut n_txs = 500;
+    let mut min_users = 5000;
+    let mut max_users = 50000;
+    if DEBUG {
+        n_txs = 50;
+        min_users = 10;
+        max_users = 10;
+    }
     let step = min_users;
 
     let mut server = lib_sh::Server::new();
@@ -548,8 +557,8 @@ fn main() {
 
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             n_users,
-            "Client:", time_client.div_f32(N_CLIENTS as f32),
-            "Server:", time_server.div_f32(N_CLIENTS as f32));
+            "Client:", time_client.div_f32(n_txs as f32),
+            "Server:", time_server.div_f32(n_txs as f32));
         println!("{}", res);
     }
 
@@ -561,7 +570,10 @@ fn main() {
 
     let n_settles = 10;
     let min_points = 0;
-    let max_points = 500;
+    let mut max_points = 500;
+    if DEBUG {
+        max_points = 50;
+    }
     let step = 25;
 
     for n_points in (min_points..(max_points+1)).step_by(step) {

@@ -5,7 +5,6 @@ use curve25519_dalek::ristretto::{RistrettoPoint, RistrettoBasepointTable, Compr
 use curve25519_dalek::scalar::Scalar;
 use sha2::{Sha256, Sha512, Digest};
 use curve25519_dalek::digest::Update;
-use curve25519_dalek::traits::Identity;
 use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit},
@@ -75,7 +74,7 @@ pub(crate) fn elgamal_dec(sk: Scalar, ct: Ciphertext) -> Point {
     ct.1 + (Scalar::zero() - sk) * ct.0
 }
 
-pub(crate) fn encrypt(pk: Point, x: i32, m: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12>) {
+pub(crate) fn encrypt(pk: Point, x: i32, m: [u8; 32], base: [u8; 32]) -> (Ciphertext, Vec<u8>, Nonce<U12>) {
     // Choose random point p to encrypt with ElGamal. H(p) is the symmetric key
     // (we model H as a random oracle)
     let p = Point::random(&mut OsRng);
@@ -84,9 +83,10 @@ pub(crate) fn encrypt(pk: Point, x: i32, m: [u8; 32]) -> (Ciphertext, Vec<u8>, N
     // Convert x to bytes and concatenate with the bytes of m.
     let x_bytes: [u8; 4] = x.to_be_bytes();
 
-    let mut pt: [u8; 36] = [0; 36];
+    let mut pt: [u8; 32+4+32] = [0; 32+4+32];
     pt[0..32].copy_from_slice(&m);
-    pt[32..].copy_from_slice(&x_bytes);
+    pt[32..36].copy_from_slice(&x_bytes);
+    pt[36..].copy_from_slice(&base);
 
     let mut hasher = Sha256::new();
     Digest::update(&mut hasher, pzip(p));
@@ -104,7 +104,7 @@ pub(crate) fn encrypt(pk: Point, x: i32, m: [u8; 32]) -> (Ciphertext, Vec<u8>, N
     (ct, sym_ct, nonce)
 }
 
-pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) -> ([u8; 32], i32) {
+pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) -> ([u8; 32], i32, [u8; 32]) {
     let p = elgamal_dec(sk, ct.0);
 
     let mut hasher = Sha256::new();
@@ -117,11 +117,12 @@ pub(crate) fn decrypt(sk: Scalar, ct: (Ciphertext, Vec<u8>), nonce: Nonce<U12>) 
     let binding = pt.unwrap();
     let out = binding.split_at(32);
     let m_tmp = out.0;
-    let x_tmp = out.1;
+    let (x_tmp, base_tmp) = out.1.split_at(4);
     let m: [u8; 32] = m_tmp.try_into().unwrap();
     let x = i32::from_be_bytes(x_tmp.try_into().unwrap());
+    let base: [u8; 32] = base_tmp.try_into().unwrap();
 
-    (m, x)
+    (m, x, base)
 }
 
 /* // Use the baby-step giant-step algorithm to compute the discrete log between
