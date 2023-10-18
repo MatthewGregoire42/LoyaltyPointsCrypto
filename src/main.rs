@@ -7,8 +7,8 @@ use std::time::{Instant, Duration};
 use rs_merkle::{algorithms, MerkleProof};
 use ed25519_dalek::Signature;
 
-const DEBUG: bool = true;
-const N_CLIENTS: usize = 100; // 10000
+const DEBUG: bool = false;
+const N_CLIENTS: usize = 10_000; // 10000
 
 fn main() {
 
@@ -70,7 +70,7 @@ fn main() {
 
     let mut n_txs = 500;
     let mut min_users = 5000;
-    let mut max_users = 50000;
+    let mut max_users = 200_000;
     if DEBUG {
         n_txs = 50;
         min_users = 10;
@@ -230,12 +230,11 @@ fn main() {
     println!("----------------------------");
     println!("--- Receipt Distribution --- (number of points)");
     println!("----------------------------");
-    // Scales with number of points in the receipt.
-    // Process receipts with varying amounts of points in them.
+    // Should be constant with regard to number of users, points, and transactions.
 
     let mut n_txs = 100;
-    let mut min_points: i32 = 100;
-    let mut max_points: i32 = 10000;
+    let mut min_points: i32 = 1000;
+    let mut max_points: i32 = 10_000;
     if DEBUG {
         n_txs = 10;
         min_points = 5;
@@ -419,7 +418,7 @@ fn main() {
 
     let mut n_txs = 500;
     let mut min_users = 5000;
-    let mut max_users = 50000;
+    let mut max_users = 200_000;
     if DEBUG {
         n_txs = 50;
         min_users = 10;
@@ -568,7 +567,7 @@ fn main() {
     // Scales with number of points in balance.
     // Process with varying numbers of points
 
-    let n_settles = 10;
+    let n_settles = 20;
     let min_points = 0;
     let mut max_points = 500;
     if DEBUG {
