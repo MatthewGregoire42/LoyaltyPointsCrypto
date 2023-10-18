@@ -69,7 +69,7 @@ fn main() {
     }
 
     let mut n_txs = 500;
-    let mut min_users = 5000;
+    let mut min_users = 10_000;
     let mut max_users = 200_000;
     if DEBUG {
         n_txs = 50;
@@ -361,6 +361,7 @@ fn main() {
         println!("{}", res);
     }
 
+    println!("");
     println!("Semihonest protocol");
     println!("");
 
@@ -417,7 +418,7 @@ fn main() {
     }
 
     let mut n_txs = 500;
-    let mut min_users = 5000;
+    let mut min_users = 10_000;
     let mut max_users = 200_000;
     if DEBUG {
         n_txs = 50;
