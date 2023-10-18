@@ -297,7 +297,7 @@ fn main() {
     // Scales with number of transactions.
     // Process with varying the number of transactions
 
-    let mut min_txs = 5;
+    let mut min_txs = 10;
     let mut max_txs = 100;
     if DEBUG {
         min_txs = 5;
