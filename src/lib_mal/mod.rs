@@ -255,7 +255,7 @@ pub(crate) struct Client {
     bal: i32,
     server_bal: Point,
     receipts: Vec<ClientReceipt>,
-    seen_ms: HashSet<[u8; 32]>,
+    seen_cts: HashSet<([u8; 32], [u8;32], Vec<u8>, Nonce<U12>)>,
     tmp: HashMap<Com, ClientTxTmp>,
     sk_enc: Scalar,
     pk_enc: Point
@@ -282,7 +282,7 @@ impl Client {
             bal: 0,
             server_bal: crypto::G*&crypto::int_to_scalar(0),
             receipts: Vec::new(),
-            seen_ms: HashSet::new(),
+            seen_cts: HashSet::new(),
             tmp: HashMap::new(),
             sk_enc: keys.0,
             pk_enc: keys.1
@@ -417,13 +417,13 @@ impl Client {
             let sym_ct = ct.1;
             let nonce = ct.2;
 
-            let (m_bits, x, base) = crypto::decrypt(self.sk_enc, (pk_ct, sym_ct), nonce);
+            let (m_bits, x, base) = crypto::decrypt(self.sk_enc, (pk_ct, sym_ct.clone()), nonce);
             let m = Scalar::from_bytes_mod_order(m_bits);
 
-            if self.seen_ms.contains(&m_bits) {
+            if self.seen_cts.contains(&(pzip(pk_ct.0), pzip(pk_ct.1), sym_ct.clone(), nonce)) {
                 panic!("Invalid m");
             }
-            self.seen_ms.insert(m_bits);
+            self.seen_cts.insert((pzip(pk_ct.0), pzip(pk_ct.1), sym_ct.clone(), nonce));
 
             let g = Point::hash_from_bytes::<Sha512>(&base);
             let x_scalar = crypto::int_to_scalar(x);
