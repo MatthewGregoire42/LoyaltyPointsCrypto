@@ -1,5 +1,6 @@
 mod lib_mal;
 mod lib_sh;
+mod lib_sh_swap_only;
 use lib_mal::*;
 use std::vec::Vec;
 use rand::Rng;
@@ -615,6 +616,176 @@ fn main() {
             n_points,
             "Client:", time_client.div_f32(n_settles as f32),
             "Server:", time_server.div_f32(n_settles as f32));
+        println!("{}", res);
+    }
+
+    println!("");
+    println!("Semihonest protocol (card swapping only)");
+    println!("");
+
+    println!("---------------------------");
+    println!("--- Client Registration --- (number of clients)");
+    println!("---------------------------");
+
+    let mut server = lib_sh_swap_only::Server::new();
+    let mut clients = Vec::<lib_sh_swap_only::Client>::with_capacity(N_CLIENTS);
+
+    let now = Instant::now();
+    for _i in 0..N_CLIENTS {
+        let barcode: u64 = rand::random();
+        let c = lib_sh_swap_only::Client::new(barcode);
+
+        clients.push(c);
+    }
+    let time_client = now.elapsed();
+
+    let now = Instant::now();
+    for i in 0..N_CLIENTS {
+        let client_data = clients[i].register_with_server();
+        let barcode = client_data;
+
+        server.register_user(barcode);
+    }
+    let time_server = now.elapsed();
+
+    let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+        N_CLIENTS,
+        "Client:", time_client.div_f32(N_CLIENTS as f32),
+        "Server:", time_server.div_f32(N_CLIENTS as f32));
+    println!("{}", res);
+
+    println!("------------------------------");
+    println!("--- Transaction Processing --- (number of users)");
+    println!("------------------------------");
+
+    struct TxOldSwapOnly {
+        uid_s: u32,
+        com: Option<Com>,
+        i_s: Option<u32>,
+        i_c: Option<u32>,
+        r: Option<[u8; 32]>,
+        uid_b: Option<u32>,
+        barcode: Option<u64>,
+        pi_merkle: Option<MerkleProof<algorithms::Sha256>>,
+    }
+
+    let mut n_txs = 500;
+    let mut min_users = 5_000;
+    let mut max_users = 50_000;
+    if DEBUG {
+        n_txs = 50;
+        min_users = 10;
+        max_users = 10;
+    }
+    let step = min_users;
+
+    let mut server = lib_sh_swap_only::Server::new();
+    let mut clients = Vec::<lib_sh_swap_only::Client>::with_capacity(max_users);
+
+    // let now = Instant::now();
+    // Initialize a system with a certain number of users,
+    // and time how long it takes to process <n_txs> transactions
+    for n_users in (min_users..(max_users+1)).step_by(step) {
+        let mut time_client = Duration::ZERO;
+        let mut time_server = Duration::ZERO;
+
+        // Initialise another <step> clients and register with server
+        for _i in 0..step {
+            let barcode: u64 = rand::random();
+            let c = lib_sh_swap_only::Client::new(barcode);
+            clients.push(c);
+
+            let client_data = clients.last_mut().unwrap().register_with_server();
+            server.register_user(client_data);
+        }
+
+        // Inform every user of the new merkle root
+        let server_data = server.share_state();
+        for i in 0..n_users {
+            clients[i].update_state(server_data.0, server_data.1);
+        }
+
+        // Process transactions
+        let mut txs = Vec::<TxOldSwapOnly>::with_capacity(n_txs);
+        for _i in 0..n_txs {
+            let shopper_uid: u32 = rand::thread_rng().gen_range(0..n_users).try_into().unwrap();
+            txs.push(TxOldSwapOnly {
+                uid_s: shopper_uid,
+                com: None,
+                i_s: None,
+                i_c: None,
+                r: None,
+                uid_b: None,
+                barcode: None,
+                pi_merkle: None,
+            });
+        }
+
+        // -----------------------------
+        let now = Instant::now();
+        for tx in &mut txs {
+            let shopper: &mut lib_sh_swap_only::Client = &mut clients[tx.uid_s as usize];
+            let com = shopper.process_tx_hello();
+            tx.com = Some(com);
+        }
+        time_client += now.elapsed();
+        // -----------------------------
+
+        // -----------------------------
+        let now = Instant::now();
+        for tx in &mut txs {
+            let i_s = server.process_tx_hello_response(tx.com.unwrap());
+            tx.i_s = Some(i_s);
+        }
+        time_server += now.elapsed();
+        // -----------------------------
+
+        // -----------------------------
+        let now = Instant::now();
+        for tx in &mut txs {
+            let i_s = tx.i_s.unwrap();
+            let com = tx.com.unwrap();
+            let shopper = &mut clients[tx.uid_s as usize];
+            let i_c_r = shopper.process_tx_compute_id(i_s, com);
+            tx.i_c = Some(i_c_r.0);
+            tx.r = Some(i_c_r.1);
+        }
+        time_client += now.elapsed();
+        // -----------------------------
+
+        // -----------------------------
+        let now = Instant::now();
+        for tx in &mut txs {
+            let i_c = tx.i_c.unwrap();
+            let r = tx.r.unwrap();
+            let com = tx.com.unwrap();
+
+            let out = server.process_tx_barcode_gen(i_c, r, com);
+            tx.uid_b = Some(out.0);
+            tx.barcode = Some(out.1);
+            tx.pi_merkle = Some(out.2);
+        }
+        time_server += now.elapsed();
+        // -----------------------------
+
+        // -----------------------------
+        let now = Instant::now();
+        for tx in &mut txs {
+            let shopper: &mut lib_sh_swap_only::Client = &mut clients[tx.uid_s as usize];
+            
+            let pi_merkle = tx.pi_merkle.as_ref().unwrap();
+            let barcode = tx.barcode.unwrap();
+            let com = tx.com.unwrap();
+
+            shopper.process_tx(pi_merkle, barcode, com);
+        }
+        time_client += now.elapsed();
+        // -----------------------------
+
+        let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+            n_users,
+            "Client:", time_client.div_f32(n_txs as f32),
+            "Server:", time_server.div_f32(n_txs as f32));
         println!("{}", res);
     }
 }
