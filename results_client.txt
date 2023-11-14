@@ -3,147 +3,107 @@ Full protocol
 ---------------------------
 --- Client Registration --- (number of clients)
 ---------------------------
-10000      Client:    106.140µs  Server:    461.893µs 
+10000      Client:    107.016µs  Server:    478.950µs 
 ------------------------------
 --- Transaction Processing --- (number of users)
 ------------------------------
-5000       Client:    3.964ms    Server:    3.537ms   
-10000      Client:    3.951ms    Server:    3.538ms   
-15000      Client:    3.957ms    Server:    3.539ms   
-20000      Client:    3.956ms    Server:    3.543ms   
-25000      Client:    3.953ms    Server:    3.540ms   
-30000      Client:    3.951ms    Server:    3.542ms   
-35000      Client:    3.958ms    Server:    3.540ms   
-40000      Client:    3.959ms    Server:    3.540ms   
-45000      Client:    3.952ms    Server:    3.540ms   
-50000      Client:    3.950ms    Server:    3.541ms   
+5000       Client:    3.960ms    Server:    3.541ms   
+10000      Client:    3.960ms    Server:    3.541ms   
+15000      Client:    3.966ms    Server:    3.547ms   
+20000      Client:    3.967ms    Server:    3.544ms   
+25000      Client:    3.969ms    Server:    3.545ms   
+30000      Client:    3.967ms    Server:    3.548ms   
+35000      Client:    3.968ms    Server:    3.547ms   
+40000      Client:    3.967ms    Server:    3.548ms   
+45000      Client:    3.976ms    Server:    3.546ms   
+50000      Client:    3.971ms    Server:    3.546ms   
 ----------------------------
 --- Receipt Distribution --- (number of points)
 ----------------------------
-1000       Client:    977.178µs  Server:    95.111µs  
-2000       Client:    976.104µs  Server:    94.572µs  
-3000       Client:    976.432µs  Server:    94.685µs  
-4000       Client:    976.937µs  Server:    92.606µs  
-5000       Client:    976.509µs  Server:    92.910µs  
-6000       Client:    976.075µs  Server:    93.304µs  
-7000       Client:    977.205µs  Server:    93.070µs  
-8000       Client:    977.092µs  Server:    92.633µs  
-9000       Client:    976.490µs  Server:    95.220µs  
-10000      Client:    975.799µs  Server:    95.606µs  
+1000       Client:    977.942µs  Server:    91.492µs  
+2000       Client:    976.991µs  Server:    91.561µs  
+3000       Client:    977.106µs  Server:    92.302µs  
+4000       Client:    976.692µs  Server:    91.654µs  
+5000       Client:    976.222µs  Server:    92.567µs  
+6000       Client:    976.582µs  Server:    91.741µs  
+7000       Client:    977.087µs  Server:    93.318µs  
+8000       Client:    975.814µs  Server:    92.413µs  
+9000       Client:    976.657µs  Server:    91.658µs  
+10000      Client:    976.000µs  Server:    92.095µs  
 ------------------------
 --- Balance Settling --- (number of transactions)
 ------------------------
-20         Client:    2.749ms    Server:    3.026ms   
-40         Client:    2.739ms    Server:    3.014ms   
-60         Client:    2.738ms    Server:    3.007ms   
-80         Client:    2.735ms    Server:    3.005ms   
-100        Client:    2.734ms    Server:    3.001ms   
-120        Client:    2.734ms    Server:    2.999ms   
-140        Client:    2.733ms    Server:    2.999ms   
-160        Client:    2.735ms    Server:    2.999ms   
-180        Client:    2.733ms    Server:    2.997ms   
-200        Client:    2.733ms    Server:    2.998ms   
+20         Client:    2.744ms    Server:    3.036ms   
+40         Client:    2.737ms    Server:    3.013ms   
+60         Client:    2.733ms    Server:    3.007ms   
+80         Client:    2.733ms    Server:    3.004ms   
+100        Client:    2.730ms    Server:    3.001ms   
+120        Client:    2.730ms    Server:    3.001ms   
+140        Client:    2.730ms    Server:    2.999ms   
+160        Client:    2.730ms    Server:    3.000ms   
+180        Client:    2.728ms    Server:    2.998ms   
+200        Client:    2.729ms    Server:    2.999ms   
 
 Semihonest protocol
 
 ---------------------------
 --- Client Registration --- (number of clients)
 ---------------------------
-10000      Client:    71.748µs   Server:    817.877µs 
+10000      Client:    71.564µs   Server:    840.229µs 
 ------------------------------
 --- Transaction Processing --- (number of users)
 ------------------------------
-5000       Client:    1.953ms    Server:    1.949ms   
-10000      Client:    1.956ms    Server:    1.949ms   
-15000      Client:    1.954ms    Server:    1.950ms   
-20000      Client:    1.957ms    Server:    1.951ms   
-25000      Client:    1.958ms    Server:    1.952ms   
-30000      Client:    1.958ms    Server:    1.954ms   
-35000      Client:    1.960ms    Server:    1.951ms   
-40000      Client:    1.960ms    Server:    1.952ms   
-45000      Client:    1.960ms    Server:    1.952ms   
-50000      Client:    1.960ms    Server:    1.957ms   
+5000       Client:    1.953ms    Server:    1.947ms   
+10000      Client:    1.954ms    Server:    1.948ms   
+15000      Client:    1.956ms    Server:    1.949ms   
+20000      Client:    1.960ms    Server:    1.949ms   
+25000      Client:    1.958ms    Server:    1.949ms   
+30000      Client:    1.959ms    Server:    1.950ms   
+35000      Client:    1.961ms    Server:    1.950ms   
+40000      Client:    1.961ms    Server:    1.950ms   
+45000      Client:    1.964ms    Server:    1.949ms   
+50000      Client:    1.960ms    Server:    1.950ms   
 ------------------------
 --- Balance Settling --- (number of points)
 ------------------------
-0          Client:    2.173ms    Server:    797.167µs 
-25         Client:    788.219µs  Server:    795.925µs 
-50         Client:    782.331µs  Server:    796.112µs 
-75         Client:    781.732µs  Server:    793.261µs 
-100        Client:    783.138µs  Server:    796.029µs 
-125        Client:    781.891µs  Server:    796.529µs 
-150        Client:    781.057µs  Server:    795.164µs 
-175        Client:    784.424µs  Server:    795.620µs 
-200        Client:    781.396µs  Server:    795.438µs 
-225        Client:    780.758µs  Server:    795.393µs 
-250        Client:    784.651µs  Server:    795.141µs 
-275        Client:    782.242µs  Server:    794.443µs 
-300        Client:    780.646µs  Server:    794.956µs 
-325        Client:    804.063µs  Server:    795.815µs 
-350        Client:    799.794µs  Server:    795.318µs 
-375        Client:    800.404µs  Server:    794.425µs 
-400        Client:    803.836µs  Server:    795.005µs 
-425        Client:    800.464µs  Server:    794.539µs 
-450        Client:    801.016µs  Server:    795.268µs 
-475        Client:    802.925µs  Server:    795.531µs 
-500        Client:    800.156µs  Server:    795.068µs 
-525        Client:    799.643µs  Server:    795.732µs 
-550        Client:    803.313µs  Server:    794.742µs 
-575        Client:    800.438µs  Server:    795.526µs 
-600        Client:    799.560µs  Server:    795.458µs 
-625        Client:    802.787µs  Server:    796.534µs 
-650        Client:    819.237µs  Server:    794.492µs 
-675        Client:    819.201µs  Server:    795.068µs 
-700        Client:    819.271µs  Server:    798.466µs 
-725        Client:    818.958µs  Server:    794.773µs 
-750        Client:    818.419µs  Server:    795.440µs 
-775        Client:    818.622µs  Server:    798.714µs 
-800        Client:    820.021µs  Server:    794.401µs 
-825        Client:    819.560µs  Server:    794.930µs 
-850        Client:    818.750µs  Server:    798.925µs 
-875        Client:    820.378µs  Server:    794.578µs 
-900        Client:    819.156µs  Server:    795.198µs 
-925        Client:    818.412µs  Server:    798.982µs 
-950        Client:    824.815µs  Server:    796.748µs 
-975        Client:    841.003µs  Server:    796.565µs 
-1000       Client:    840.263µs  Server:    799.232µs 
-1025       Client:    839.815µs  Server:    795.115µs 
-1050       Client:    837.500µs  Server:    795.534µs 
-1075       Client:    842.016µs  Server:    795.057µs 
-1100       Client:    840.534µs  Server:    794.985µs 
-1125       Client:    838.635µs  Server:    795.393µs 
-1150       Client:    841.904µs  Server:    794.724µs 
-1175       Client:    838.969µs  Server:    795.471µs 
-1200       Client:    837.628µs  Server:    795.513µs 
-1225       Client:    840.951µs  Server:    795.044µs 
-1250       Client:    838.466µs  Server:    795.386µs 
-1275       Client:    858.399µs  Server:    794.880µs 
-1300       Client:    860.930µs  Server:    795.320µs 
-1325       Client:    857.305µs  Server:    795.414µs 
-1350       Client:    858.510µs  Server:    794.943µs 
-1375       Client:    861.000µs  Server:    795.846µs 
-1400       Client:    859.846µs  Server:    795.852µs 
-1425       Client:    857.836µs  Server:    794.490µs 
-1450       Client:    859.880µs  Server:    795.216µs 
-1475       Client:    857.880µs  Server:    794.242µs 
-1500       Client:    857.841µs  Server:    795.479µs 
-1525       Client:    860.050µs  Server:    794.698µs 
-1550       Client:    858.271µs  Server:    795.258µs 
-1575       Client:    857.125µs  Server:    795.245µs 
-1600       Client:    879.208µs  Server:    795.438µs 
-1625       Client:    878.365µs  Server:    793.810µs 
-1650       Client:    878.935µs  Server:    796.107µs 
-1675       Client:    881.341µs  Server:    796.008µs 
-1700       Client:    877.826µs  Server:    794.578µs 
-1725       Client:    877.185µs  Server:    800.695µs 
-1750       Client:    875.883µs  Server:    794.482µs 
-1775       Client:    878.044µs  Server:    794.044µs 
-1800       Client:    876.302µs  Server:    798.659µs 
-1825       Client:    877.401µs  Server:    794.880µs 
-1850       Client:    877.971µs  Server:    795.365µs 
-1875       Client:    877.292µs  Server:    798.052µs 
-1900       Client:    877.026µs  Server:    795.331µs 
-1925       Client:    896.672µs  Server:    794.208µs 
-1950       Client:    895.649µs  Server:    798.641µs 
-1975       Client:    897.505µs  Server:    793.136µs 
-2000       Client:    896.521µs  Server:    794.630µs 
+0          Client:    1.897ms    Server:    796.412µs 
+25         Client:    780.141µs  Server:    797.029µs 
+50         Client:    783.711µs  Server:    795.109µs 
+75         Client:    780.188µs  Server:    795.875µs 
+100        Client:    782.081µs  Server:    795.974µs 
+125        Client:    783.893µs  Server:    795.682µs 
+150        Client:    781.620µs  Server:    794.425µs 
+175        Client:    779.844µs  Server:    795.979µs 
+200        Client:    780.010µs  Server:    799.219µs 
+225        Client:    781.245µs  Server:    795.096µs 
+250        Client:    781.024µs  Server:    795.208µs 
+275        Client:    779.672µs  Server:    799.227µs 
+300        Client:    780.021µs  Server:    796.063µs 
+325        Client:    801.305µs  Server:    795.247µs 
+350        Client:    800.625µs  Server:    799.292µs 
+375        Client:    800.039µs  Server:    796.076µs 
+400        Client:    800.859µs  Server:    795.310µs 
+425        Client:    800.313µs  Server:    798.039µs 
+450        Client:    801.753µs  Server:    798.287µs 
+475        Client:    800.320µs  Server:    798.195µs 
+500        Client:    800.253µs  Server:    798.940µs 
+
+Semihonest protocol (card swapping only)
+
+---------------------------
+--- Client Registration --- (number of clients)
+---------------------------
+10000      Client:    80.000ns   Server:    457.840µs 
+------------------------------
+--- Transaction Processing --- (number of users)
+------------------------------
+5000       Client:    28.248µs   Server:    7.798µs   
+10000      Client:    30.309µs   Server:    8.560µs   
+15000      Client:    30.525µs   Server:    8.525µs   
+20000      Client:    32.382µs   Server:    9.511µs   
+25000      Client:    32.808µs   Server:    9.435µs   
+30000      Client:    32.454µs   Server:    9.384µs   
+35000      Client:    34.616µs   Server:    9.919µs   
+40000      Client:    34.507µs   Server:    10.540µs  
+45000      Client:    34.272µs   Server:    10.082µs  
+50000      Client:    34.716µs   Server:    9.919µs   
