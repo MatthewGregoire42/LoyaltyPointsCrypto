@@ -357,8 +357,8 @@ fn main() {
         
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             n_txs*2, // Since we only initialize one client, every tx touches their account twice
-            "Client:", time_client.div_f32((n_txs*2) as f32),
-            "Server:", time_server.div_f32((n_txs*2) as f32));
+            "Client:", time_client,
+            "Server:", time_server);
         println!("{}", res);
     }
 
@@ -571,7 +571,7 @@ fn main() {
 
     let n_settles = 20;
     let min_points = 0;
-    let mut max_points = 500;
+    let mut max_points = 2000;
     if DEBUG {
         max_points = 50;
     }
