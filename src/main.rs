@@ -82,7 +82,6 @@ fn main() {
     let mut server = Server::new();
     let mut clients = Vec::<Client>::with_capacity(max_users);
 
-    // let now = Instant::now();
     // Initialize a system with a certain number of users,
     // and time how long it takes to process <n_txs> transactions
     for n_users in (min_users..(max_users+1)).step_by(step) {
@@ -431,7 +430,6 @@ fn main() {
     let mut server = lib_sh::Server::new();
     let mut clients = Vec::<lib_sh::Client>::with_capacity(max_users);
 
-    // let now = Instant::now();
     // Initialize a system with a certain number of users,
     // and time how long it takes to process <n_txs> transactions
     for n_users in (min_users..(max_users+1)).step_by(step) {
@@ -682,7 +680,6 @@ fn main() {
     let mut server = lib_sh_swap_only::Server::new();
     let mut clients = Vec::<lib_sh_swap_only::Client>::with_capacity(max_users);
 
-    // let now = Instant::now();
     // Initialize a system with a certain number of users,
     // and time how long it takes to process <n_txs> transactions
     for n_users in (min_users..(max_users+1)).step_by(step) {

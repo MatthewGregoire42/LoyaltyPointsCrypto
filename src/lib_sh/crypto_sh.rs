@@ -64,12 +64,9 @@ pub(crate) fn elgamal_enc(pk: [u8; 32], m: i32) -> ([u8; 32], [u8; 32], [u8; 32]
     let m_pos: u32 = m.abs() as u32;
     let m_scalar = if m == m_pos as i32 { Scalar::from(m_pos) }
                    else { Scalar::zero() - Scalar::from(m_pos) };
-    // println!("m == m_pos? {}", m == m_pos as i32);
 
     let c1 = &y*G;
     let c2 = &m_scalar*G + y*pk;
-
-    // println!("Actual m*g: {}", encode((&m_scalar*G).compress().to_bytes()));
 
     // y is a secret; it needs to be kept by the client to generate a proof
     // and then is discarded afterwards.
@@ -153,18 +150,6 @@ pub(crate) fn int_to_scalar(m: i32) -> Scalar {
                    else { Scalar::zero() - Scalar::from(m_pos) };
     m_scalar
 }
-
-// impl TxCiphertextData {
-//     fn compress(&self) -> CompressedTxCiphertextData {
-//         CompressedTxCiphertextData {
-//             ciphertext: (pzip(self.ciphertext.0),
-//                          pzip(self.ciphertext.1)),
-//             y: szip(self.y),
-//             m: Scalar::to_bytes(&self.m),
-//             public_h: pzip(self.public_h),
-//         }
-//     }
-// }
 
 impl CompressedTxCiphertextData {
     pub(crate) fn decompress(&self) -> TxCiphertextData {
@@ -291,8 +276,6 @@ pub(crate) fn zk_ct_eq_verify(pi: CompressedCtEqProof) -> bool {
 }
 
 #[derive(Clone)]
-// TODO: factor pt, ct, and h out of this proof. Should be provided separately.
-// (Same goes for the other proof and values the server already knows)
 pub(crate) struct CompressedCtDecProof {
     ct: ([u8; 32], [u8; 32]),
     pt: [u8; 32],
@@ -311,7 +294,6 @@ pub(crate) fn zk_ct_dec_prove(ct: ([u8; 32], [u8; 32]), pt: i32, x: [u8; 32], h:
     // Generate Chaum-Pedersen proof
     let u = c0;
     let v = puzip(h);
-    // let w = c1 + G * &(Scalar::zero() - pt);
 
     // Commitment
     let x_t = Scalar::random(&mut OsRng);

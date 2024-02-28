@@ -251,7 +251,6 @@ pub(crate) struct Client {
     uid: u32,
     num_users: u32,
     merkle_root: Option<<algorithms::Sha256 as rs_merkle::Hasher>::Hash>,
-    // server_vk: VerifyingKey,
     bal: i32,
     server_bal: Point,
     receipts: Vec<ClientReceipt>,
