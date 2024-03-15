@@ -26,3 +26,7 @@ pkg install rust
 ````
 
 Then follow the instructions above. You will need to place the project file within your home directory; to do so, you may need to allow Termux permission access to your files and media.
+
+#### Acknowledgment
+
+This material is based upon work supported by the National Science Foundation under Grant No. 2234408. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation.
