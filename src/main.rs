@@ -13,7 +13,7 @@ const N_CLIENTS: usize = 10_000; // 10000
 
 fn main() {
 
-    println!("Full protocol");
+    println!("Malicious security protocol");
     println!("");
 
     println!("---------------------------");
@@ -227,9 +227,9 @@ fn main() {
         println!("{}", res);
     }
 
-    println!("----------------------------");
-    println!("--- Receipt Distribution --- (number of points)");
-    println!("----------------------------");
+    println!("--------------------------");
+    println!("--- Receipt Processing --- (number of points)");
+    println!("--------------------------");
     // Should be constant with regard to number of users, points, and transactions.
 
     let mut n_txs = 100;
@@ -575,6 +575,28 @@ fn main() {
     }
     let step = 25;
 
+    // Run the settling once before measurement to get into a steady cache state
+    let mut server = lib_sh::Server::new();
+    let mut client = lib_sh::Client::new(1);
+    let client_data = client.register_with_server();
+    server.register_user(client_data.0, client_data.1);
+    let server_data = server.share_state();
+    client.update_state(server_data.0, server_data.1);
+    let ct = lib_sh::crypto_sh::elgamal_enc(client.pk_enc, min_points);
+    server.users.get_mut(&0).unwrap().balance = lib_sh::crypto_sh::add_ciphertexts(
+        server.users[&0u32].balance, (ct.0, ct.1)
+    );
+    let _balance = server.settle_balance_hello(0);
+    let mut proofs = Vec::<lib_sh::crypto_sh::CompressedCtDecProof>::with_capacity(n_settles);
+    for _i in 0..n_settles {
+        let out = client.settle_balance((ct.0, ct.1));
+        proofs.push(out.1);
+    }
+    for i in 0..n_settles {
+        let test = server.settle_balance_finalize(proofs[i].clone());
+        assert!(test);
+    }
+
     for n_points in (min_points..(max_points+1)).step_by(step) {
         // Only initialize one client, so every receipt will go
         // back to their account
@@ -618,7 +640,7 @@ fn main() {
     }
 
     println!("");
-    println!("Semihonest protocol (card swapping only)");
+    println!("Semihonest protocol (Barcode swapping only)");
     println!("");
 
     println!("---------------------------");
