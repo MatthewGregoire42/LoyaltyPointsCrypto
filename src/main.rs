@@ -17,13 +17,15 @@ fn main() {
     println!("");
 
     println!("---------------------------");
-    println!("--- Client Registration --- (number of clients)");
+    println!("--- Client Registration --- (User ID)");
     println!("---------------------------");
 
     let mut server = Server::new();
+    let mut server_times = Vec::<Duration>::with_capacity(N_CLIENTS);
     let mut clients = Vec::<Client>::with_capacity(N_CLIENTS);
+    let mut client_times = Vec::<Duration>::with_capacity(N_CLIENTS);
     
-    for i in 0..N_CLIENTS {
+    for _i in 0..N_CLIENTS {
         // Client side
         let now = Instant::now();
         let barcode: u64 = rand::random();
@@ -31,7 +33,10 @@ fn main() {
         let time_client = now.elapsed();
         
         clients.push(c);
+        client_times.push(time_client);
+    }
 
+    for i in 0..N_CLIENTS {
         // Server side
         let now = Instant::now();
         let client_data = clients[i].register_with_server();
@@ -41,10 +46,14 @@ fn main() {
         server.register_user(barcode, pk);
         let time_server = now.elapsed();
 
+        server_times.push(time_server);
+    }
+
+    for i in 0..N_CLIENTS {
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             i,
-            "Client:", time_client,
-            "Server:", time_server);
+            "Client:", client_times[i],
+            "Server:", server_times[i]);
         println!("{}", res);
     }
 
@@ -366,13 +375,15 @@ fn main() {
     println!("");
 
     println!("---------------------------");
-    println!("--- Client Registration --- (number of clients)");
+    println!("--- Client Registration --- (User ID)");
     println!("---------------------------");
 
     let mut server = Server::new();
+    let mut server_times = Vec::<Duration>::with_capacity(N_CLIENTS);
     let mut clients = Vec::<Client>::with_capacity(N_CLIENTS);
+    let mut client_times = Vec::<Duration>::with_capacity(N_CLIENTS);
     
-    for i in 0..N_CLIENTS {
+    for _i in 0..N_CLIENTS {
         // Client side
         let now = Instant::now();
         let barcode: u64 = rand::random();
@@ -380,7 +391,10 @@ fn main() {
         let time_client = now.elapsed();
         
         clients.push(c);
+        client_times.push(time_client);
+    }
 
+    for i in 0..N_CLIENTS {
         // Server side
         let now = Instant::now();
         let client_data = clients[i].register_with_server();
@@ -390,10 +404,14 @@ fn main() {
         server.register_user(barcode, pk);
         let time_server = now.elapsed();
 
+        server_times.push(time_server);
+    }
+
+    for i in 0..N_CLIENTS {
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             i,
-            "Client:", time_client,
-            "Server:", time_server);
+            "Client:", client_times[i],
+            "Server:", server_times[i]);
         println!("{}", res);
     }
 
@@ -644,13 +662,15 @@ fn main() {
     println!("");
 
     println!("---------------------------");
-    println!("--- Client Registration --- (number of clients)");
+    println!("--- Client Registration --- (User ID)");
     println!("---------------------------");
 
     let mut server = Server::new();
+    let mut server_times = Vec::<Duration>::with_capacity(N_CLIENTS);
     let mut clients = Vec::<Client>::with_capacity(N_CLIENTS);
+    let mut client_times = Vec::<Duration>::with_capacity(N_CLIENTS);
     
-    for i in 0..N_CLIENTS {
+    for _i in 0..N_CLIENTS {
         // Client side
         let now = Instant::now();
         let barcode: u64 = rand::random();
@@ -658,7 +678,10 @@ fn main() {
         let time_client = now.elapsed();
         
         clients.push(c);
+        client_times.push(time_client);
+    }
 
+    for i in 0..N_CLIENTS {
         // Server side
         let now = Instant::now();
         let client_data = clients[i].register_with_server();
@@ -668,10 +691,14 @@ fn main() {
         server.register_user(barcode, pk);
         let time_server = now.elapsed();
 
+        server_times.push(time_server);
+    }
+
+    for i in 0..N_CLIENTS {
         let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
             i,
-            "Client:", time_client,
-            "Server:", time_server);
+            "Client:", client_times[i],
+            "Server:", server_times[i]);
         println!("{}", res);
     }
 
