@@ -9,7 +9,7 @@ use rs_merkle::{algorithms, MerkleProof};
 use ed25519_dalek::Signature;
 
 const DEBUG: bool = false;
-const N_CLIENTS: usize = 10_000; // 10000
+const N_CLIENTS: usize = 1000;
 
 fn main() {
 
@@ -22,31 +22,31 @@ fn main() {
 
     let mut server = Server::new();
     let mut clients = Vec::<Client>::with_capacity(N_CLIENTS);
-
-    let now = Instant::now();
-    for _i in 0..N_CLIENTS {
+    
+    for i in 0..N_CLIENTS {
+        // Client side
+        let now = Instant::now();
         let barcode: u64 = rand::random();
         let c = Client::new(barcode);
-
+        let time_client = now.elapsed();
+        
         clients.push(c);
-    }
-    let time_client = now.elapsed();
 
-    let now = Instant::now();
-    for i in 0..N_CLIENTS {
+        // Server side
+        let now = Instant::now();
         let client_data = clients[i].register_with_server();
         let barcode = client_data.0;
         let pk = client_data.1;
 
         server.register_user(barcode, pk);
-    }
-    let time_server = now.elapsed();
+        let time_server = now.elapsed();
 
-    let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
-        N_CLIENTS,
-        "Client:", time_client.div_f32(N_CLIENTS as f32),
-        "Server:", time_server.div_f32(N_CLIENTS as f32));
-    println!("{}", res);
+        let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+            i,
+            "Client:", time_client,
+            "Server:", time_server);
+        println!("{}", res);
+    }
 
     println!("------------------------------");
     println!("--- Transaction Processing --- (number of users)");
@@ -369,33 +369,33 @@ fn main() {
     println!("--- Client Registration --- (number of clients)");
     println!("---------------------------");
 
-    let mut server = lib_sh::Server::new();
-    let mut clients = Vec::<lib_sh::Client>::with_capacity(N_CLIENTS);
-
-    let now = Instant::now();
-    for _i in 0..N_CLIENTS {
-        let barcode: u64 = rand::random();
-        let c = lib_sh::Client::new(barcode);
-
-        clients.push(c);
-    }
-    let time_client = now.elapsed();
-
-    let now = Instant::now();
+    let mut server = Server::new();
+    let mut clients = Vec::<Client>::with_capacity(N_CLIENTS);
+    
     for i in 0..N_CLIENTS {
+        // Client side
+        let now = Instant::now();
+        let barcode: u64 = rand::random();
+        let c = Client::new(barcode);
+        let time_client = now.elapsed();
+        
+        clients.push(c);
+
+        // Server side
+        let now = Instant::now();
         let client_data = clients[i].register_with_server();
         let barcode = client_data.0;
         let pk = client_data.1;
 
         server.register_user(barcode, pk);
-    }
-    let time_server = now.elapsed();
+        let time_server = now.elapsed();
 
-    let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
-        N_CLIENTS,
-        "Client:", time_client.div_f32(N_CLIENTS as f32),
-        "Server:", time_server.div_f32(N_CLIENTS as f32));
-    println!("{}", res);
+        let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+            i,
+            "Client:", time_client,
+            "Server:", time_server);
+        println!("{}", res);
+    }
 
     println!("------------------------------");
     println!("--- Transaction Processing --- (number of users)");
@@ -647,32 +647,33 @@ fn main() {
     println!("--- Client Registration --- (number of clients)");
     println!("---------------------------");
 
-    let mut server = lib_sh_swap_only::Server::new();
-    let mut clients = Vec::<lib_sh_swap_only::Client>::with_capacity(N_CLIENTS);
-
-    let now = Instant::now();
-    for _i in 0..N_CLIENTS {
-        let barcode: u64 = rand::random();
-        let c = lib_sh_swap_only::Client::new(barcode);
-
-        clients.push(c);
-    }
-    let time_client = now.elapsed();
-
-    let now = Instant::now();
+    let mut server = Server::new();
+    let mut clients = Vec::<Client>::with_capacity(N_CLIENTS);
+    
     for i in 0..N_CLIENTS {
+        // Client side
+        let now = Instant::now();
+        let barcode: u64 = rand::random();
+        let c = Client::new(barcode);
+        let time_client = now.elapsed();
+        
+        clients.push(c);
+
+        // Server side
+        let now = Instant::now();
         let client_data = clients[i].register_with_server();
-        let barcode = client_data;
+        let barcode = client_data.0;
+        let pk = client_data.1;
 
-        server.register_user(barcode);
+        server.register_user(barcode, pk);
+        let time_server = now.elapsed();
+
+        let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
+            i,
+            "Client:", time_client,
+            "Server:", time_server);
+        println!("{}", res);
     }
-    let time_server = now.elapsed();
-
-    let res = format!("{: <10} {: <10} {: <10.3?} {: <10} {: <10.3?}",
-        N_CLIENTS,
-        "Client:", time_client.div_f32(N_CLIENTS as f32),
-        "Server:", time_server.div_f32(N_CLIENTS as f32));
-    println!("{}", res);
 
     println!("------------------------------");
     println!("--- Transaction Processing --- (number of users)");
