@@ -9,7 +9,7 @@ use rs_merkle::{algorithms, MerkleProof};
 use ed25519_dalek::Signature;
 
 const DEBUG: bool = false;
-const N_CLIENTS: usize = 1000;
+const N_CLIENTS: usize = 500;
 
 fn main() {
 
