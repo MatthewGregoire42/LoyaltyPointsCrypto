@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  rust-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/usr/src/app # Mount your project directory to the container
+    stdin_open: true
+    tty: true
