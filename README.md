@@ -15,7 +15,9 @@ Both client and server overhead times are reported in the output. When there are
 
 This project is built in Rust. Dependencies are listed in `Cargo.toml`.
 
-To run the benchmarks reported in the paper, navigate to the LoyaltyPointsCrypto folder, and run `cargo run --release`.
+To run the benchmarks reported in the paper, navigate to the LoyaltyPointsCrypto directory, and run `cargo run --release`.
+
+Alternatively, to run the benchmarks inside the provided Docker image, navigate to the LoyaltyPointsCrypto directory, and, with Docker installed, run `docker-compose build` and `docker-compose up`.
 
 ### Android
 
